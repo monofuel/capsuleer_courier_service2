@@ -5,7 +5,7 @@ import
 
 const
   Version = "0.1.0"
-  DefaultPort = 8080
+  DefaultPort = 3000
   DefaultWebDir = "web"
 
 proc serveStaticFile(request: Request) =

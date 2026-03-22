@@ -11,5 +11,5 @@ RUN make build
 
 COPY web ./web
 
-EXPOSE 8080
+EXPOSE 3000
 CMD ["./capsuleer_courier_service2"]

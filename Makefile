@@ -1,4 +1,4 @@
-.PHONY: test integration-test e2e-test build docker-build docker-build-push serve move-build move-test deploy-local npm-install integration-build frontend-bundle frontend-build frontend-dev
+.PHONY: test integration-test e2e-test build docker-build docker-build-push serve move-build move-test deploy-local dev npm-install integration-build frontend-bundle frontend-build frontend-dev
 
 DOCKER_IMAGE ?= gitea.solution-nine.monofuel.dev/monolab/capsuleer_courier_service2:latest
 DOCKER_PLATFORM ?= linux/amd64
@@ -80,6 +80,9 @@ serve: build frontend-dev
 	./capsuleer_courier_service2
 
 MOVE_DIR = move-contracts/capsuleer_courier_service
+
+dev:
+	docker compose run --rm --service-ports sui-dev bash -c "/opt/sui-dev/scripts/deploy.sh && echo 'Sui node running on port 9000. Press Ctrl+C to stop.' && tail -f /dev/null"
 
 move-build:
 	docker compose run --rm --entrypoint bash sui-dev -c "cd /workspace/$(MOVE_DIR) && sui move build -e testnet"

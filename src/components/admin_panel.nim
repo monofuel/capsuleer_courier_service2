@@ -49,7 +49,7 @@ proc render(self: AdminPanel) =
         else:
           statusDiv.innerHTML = "Transaction failed"
 
-      discard submit()
+      runWithErrorHandler(submit(), statusDiv)
     )
 
 proc connectedCallback(self: AdminPanel) =

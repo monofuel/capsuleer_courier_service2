@@ -18,7 +18,7 @@ proc render(self: CreateDelivery) =
     "<div class=\"panel\">" &
     "<h3>Request Delivery</h3>" &
     "<div class=\"form-group\"><label>Storage Unit ID</label>" &
-    "<input type=\"text\" id=\"ssu-id\" placeholder=\"0x...\" /></div>" &
+    "<input type=\"text\" id=\"ssu-id\" value=\"0x0000000000000000000000000000000000000000000000000000000000001234\" /></div>" &
     "<div class=\"form-group\"><label>Item Type ID</label>" &
     "<input type=\"number\" id=\"type-id\" value=\"77800\" /></div>" &
     "<div class=\"form-group\"><label>Quantity (1-500)</label>" &
@@ -58,7 +58,7 @@ proc render(self: CreateDelivery) =
         else:
           statusDiv.innerHTML = "Transaction failed"
 
-      discard submit()
+      runWithErrorHandler(submit(), statusDiv)
     )
 
 proc connectedCallback(self: CreateDelivery) =

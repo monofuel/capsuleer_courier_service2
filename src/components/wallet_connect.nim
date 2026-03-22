@@ -79,11 +79,12 @@ proc render(self: WalletConnect) =
           onConnectCallback()
       )
 
-proc connectedCallback(self: WalletConnect) =
-  ## Called when element is added to DOM.
-  self.render()
-
-  # Auto-connect if we have saved credentials.
+proc tryAutoConnect*() =
+  ## Auto-connect from saved credentials. Call after initSuiSdk() completes.
+  if not sdkLoaded:
+    return
+  if connectedAddress != nil:
+    return
   var savedKey: cstring
   {.emit: "`savedKey` = localStorage.getItem('sui_private_key') || '';".}
   if savedKey.len > 0:
@@ -92,8 +93,14 @@ proc connectedCallback(self: WalletConnect) =
     connectedClient = newSuiClient(savedRpc)
     connectedKeypair = newKeypairFromPrivateKey(savedKey)
     connectedAddress = connectedKeypair.getAddress()
-    self.render()
+    let el = document.querySelector("wallet-connect")
+    if not el.isNil:
+      {.emit: "if (`el`.connectedCallback) `el`.connectedCallback();".}
     if onConnectCallback != nil:
       onConnectCallback()
+
+proc connectedCallback(self: WalletConnect) =
+  ## Called when element is added to DOM.
+  self.render()
 
 setupNimponent[WalletConnect]("wallet-connect", nil, connectedCallback)

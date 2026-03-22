@@ -52,7 +52,7 @@ proc render(self: CourierActions) =
         else:
           statusDiv.innerHTML = "Transaction failed"
 
-      discard submit()
+      runWithErrorHandler(submit(), statusDiv)
     )
 
   # Pickup button.
@@ -75,7 +75,7 @@ proc render(self: CourierActions) =
         else:
           statusDiv.innerHTML = "Transaction failed"
 
-      discard submit()
+      runWithErrorHandler(submit(), statusDiv)
     )
 
 proc connectedCallback(self: CourierActions) =

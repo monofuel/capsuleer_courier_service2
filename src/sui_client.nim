@@ -7,7 +7,7 @@
 import std/[jsffi, asyncjs]
 
 # --- SDK module references (populated by initSuiSdk) ---
-var sdkLoaded = false
+var sdkLoaded* = false
 
 {.emit: """
 var SuiClientClass = null;
@@ -158,3 +158,16 @@ proc readEnvFile*(path: cstring): JsObject =
   result = env
 
 proc getEnv*(env: JsObject, key: cstring): cstring {.importjs: "#[#]".}
+
+# --- Async error helper ---
+
+proc runWithErrorHandler*(future: Future[void], statusElement: auto) =
+  ## Run an async future and display errors in a DOM element.
+  {.emit: """
+  `future`.catch(function(err) {
+    console.error('Transaction error:', err);
+    if (`statusElement`) {
+      `statusElement`.innerHTML = 'Error: ' + (err.message || err);
+    }
+  });
+  """.}
