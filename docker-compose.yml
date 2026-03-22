@@ -16,6 +16,7 @@ services:
     volumes:
       - sui-config:/root/.sui
       - .:/workspace
+      - ../world-contracts:/workspace/world-contracts
 
 volumes:
   sui-config:

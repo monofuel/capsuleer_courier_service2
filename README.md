@@ -17,32 +17,32 @@
   - [x] `Dockerfile` based on `monolab-nim:latest`
   - [x] `docker-compose.yml` for local dev (nim server + sui local node)
   - [x] `docker/sui-dev/` with Sui CLI, local node, keypair generation (adapted from builder-scaffold)
-  - [ ] verify docker images build and run
+  - [x] verify docker images build and run (sui-dev builds and compiles Move contracts)
 
-### Phase 2: Sui Move Smart Contracts
-- [ ] set up Move project structure
-  - [ ] `move-contracts/capsuleer_courier_service/` directory
-  - [ ] `Move.toml` with world-contracts dependency (local path for dev, git for CI)
-  - [ ] `sources/` and `tests/` directories
-- [ ] implement courier service contracts (port v1 logic to Sui Move)
-  - [ ] `config.move` — shared ExtensionConfig, AdminCap, typed witness (CourierAuth)
-  - [ ] `delivery.move` — core delivery data structures
-    - delivery request (smart_object_id, item_type, quantity, sender, receiver, status)
-    - player metrics (likes, deliveries_completed, pending_count)
-    - item likes mapping (item_type → likes reward)
-  - [ ] `courier_service.move` — entry functions
-    - `create_delivery_request(storage_unit, type_id, quantity)` — request an item delivery
-    - `fulfill_delivery(delivery_id)` — courier marks delivery complete, transfers items
-    - `pickup(delivery_id)` — receiver picks up delivered items
-    - `set_likes(type_id, amount)` — admin: configure likes per item type
-    - `get_likes(player)` — view player's earned likes
-  - [ ] validations: quantity 1-500, max 5 pending per player, receiver-only pickup
-- [ ] Move unit tests
-  - [ ] test delivery creation and state
-  - [ ] test fulfillment flow and likes award
-  - [ ] test pickup and delivery cleanup
-  - [ ] test validation failures (bad quantity, too many pending, wrong receiver)
-- [ ] add `make move-build` and `make move-test` targets
+### Phase 2: Sui Move Smart Contracts ✅
+- [x] set up Move project structure
+  - [x] `move-contracts/capsuleer_courier_service/` directory
+  - [x] `Move.toml` with world-contracts dependency (local path for dev, git comment for CI)
+  - [x] `sources/` and `tests/` directories
+- [x] project documentation (`docs/`)
+  - [x] `sui-move-basics.md` — Move language, objects, dynamic fields, build/test
+  - [x] `eve-frontier-architecture.md` — three-layer design, typed witness, capabilities
+  - [x] `storage-unit-api.md` — inventory model, access modes, extension registration
+  - [x] `courier-service-design.md` — v1 vs v2 comparison, data model, flow
+  - [x] `docker-workflow.md` — sui-dev container, Makefile targets, volumes
+- [x] implement courier service contracts (port v1 logic to Sui Move)
+  - [x] `config.move` — shared ExtensionConfig, AdminCap, typed witness (CourierAuth), UID accessors
+  - [x] `courier_service.move` — all state as dynamic fields on ExtensionConfig
+    - `create_delivery_request` — request an item delivery (validates quantity, likes, pending count)
+    - `fulfill_delivery` — courier marks delivery complete, earns likes
+    - `pickup` — receiver picks up delivered items, delivery record removed
+    - `set_likes` — admin: configure likes per item type
+    - view functions: `get_player_metrics`, `get_item_likes`, `get_delivery`
+  - [x] validations: quantity 1-500, max 5 pending per player, receiver-only pickup
+- [x] Move unit tests (12 tests, all passing)
+  - [x] test delivery creation, fulfillment, pickup, likes
+  - [x] test error cases (bad quantity, max pending, no likes, wrong receiver, not delivered, already delivered, nonexistent)
+- [x] `make move-build` and `make move-test` targets (run via docker, no host sui CLI needed)
 
 ### Phase 3: Local Sui Dev Environment
 - [ ] add Sui node to docker-compose (reference builder-scaffold/docker/)

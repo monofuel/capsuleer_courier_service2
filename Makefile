@@ -1,4 +1,4 @@
-.PHONY: test integration-test e2e-test build docker-build docker-build-push serve
+.PHONY: test integration-test e2e-test build docker-build docker-build-push serve move-build move-test
 
 DOCKER_IMAGE ?= gitea.solution-nine.monofuel.dev/monolab/capsuleer_courier_service2:latest
 DOCKER_PLATFORM ?= linux/amd64
@@ -56,6 +56,14 @@ e2e-test: nim.cfg
 
 serve: build
 	./capsuleer_courier_service2
+
+MOVE_DIR = move-contracts/capsuleer_courier_service
+
+move-build:
+	docker compose run --rm --entrypoint bash sui-dev -c "cd /workspace/$(MOVE_DIR) && sui move build -e testnet"
+
+move-test:
+	docker compose run --rm --entrypoint bash sui-dev -c "cd /workspace/$(MOVE_DIR) && sui move test"
 
 docker-build:
 	docker buildx build \

@@ -15,3 +15,7 @@ nimcache
 .*
 !.gitignore
 nim.cfg
+
+# Move build artifacts:
+**/build/
+Move.lock

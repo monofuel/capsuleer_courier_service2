@@ -1,0 +1,14 @@
+[package]
+name = "capsuleer_courier_service"
+edition = "2024"
+
+[dependencies]
+# Local dependency for fast iteration:
+world = { local = "../../world-contracts/contracts/world" }
+# Git dependency for CI/production:
+# world = { git = "https://github.com/evefrontier/world-contracts.git", subdir = "contracts/world", rev = "v0.0.18" }
+
+[environments]
+testnet_internal = "4c78adac"
+testnet_utopia = "4c78adac"
+testnet_stillness = "4c78adac"
