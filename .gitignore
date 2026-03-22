@@ -14,8 +14,12 @@ nimcache
 *.out
 .*
 !.gitignore
+!.env.example
 nim.cfg
 
 # Move build artifacts:
 **/build/
 Move.lock
+
+# Generated env and deployment files:
+deployments/

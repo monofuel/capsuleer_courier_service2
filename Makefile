@@ -1,4 +1,4 @@
-.PHONY: test integration-test e2e-test build docker-build docker-build-push serve move-build move-test
+.PHONY: test integration-test e2e-test build docker-build docker-build-push serve move-build move-test deploy-local
 
 DOCKER_IMAGE ?= gitea.solution-nine.monofuel.dev/monolab/capsuleer_courier_service2:latest
 DOCKER_PLATFORM ?= linux/amd64
@@ -64,6 +64,9 @@ move-build:
 
 move-test:
 	docker compose run --rm --entrypoint bash sui-dev -c "cd /workspace/$(MOVE_DIR) && sui move test"
+
+deploy-local:
+	docker compose run --rm --service-ports sui-dev bash /opt/sui-dev/scripts/deploy.sh
 
 docker-build:
 	docker buildx build \

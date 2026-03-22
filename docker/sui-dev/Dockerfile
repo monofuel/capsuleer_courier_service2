@@ -30,7 +30,7 @@ RUN curl -sSfL https://raw.githubusercontent.com/MystenLabs/suiup/main/install.s
 WORKDIR /workspace
 ENV SUI_CONFIG_DIR=/root/.sui
 
-COPY scripts/ /workspace/scripts/
-RUN dos2unix /workspace/scripts/*.sh && chmod +x /workspace/scripts/*.sh
+COPY scripts/ /opt/sui-dev/scripts/
+RUN dos2unix /opt/sui-dev/scripts/*.sh && chmod +x /opt/sui-dev/scripts/*.sh
 
-ENTRYPOINT ["/workspace/scripts/entrypoint.sh"]
+ENTRYPOINT ["/opt/sui-dev/scripts/entrypoint.sh"]
