@@ -159,6 +159,31 @@ proc readEnvFile*(path: cstring): JsObject =
 
 proc getEnv*(env: JsObject, key: cstring): cstring {.importjs: "#[#]".}
 
+# --- Event queries via JSON-RPC ---
+
+proc queryEvents*(rpcUrl: cstring, eventType: cstring, limit: int = 50): Future[JsObject] {.async.} =
+  ## Query events by Move event type via suix_queryEvents RPC.
+  var resp: JsObject
+  {.emit: """
+  const response = await fetch(`rpcUrl`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'suix_queryEvents',
+      params: [
+        { MoveEventType: `eventType` },
+        null,
+        `limit`,
+        false
+      ]
+    })
+  });
+  `resp` = await response.json();
+  """.}
+  result = resp
+
 # --- Async error helper ---
 
 proc runWithErrorHandler*(future: Future[void], statusElement: auto) =

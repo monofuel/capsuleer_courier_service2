@@ -46,7 +46,7 @@ integration-build: nim.cfg
 	done
 
 integration-test: integration-build
-	docker compose run --rm --service-ports sui-dev bash -c "\
+	docker compose run --rm sui-dev bash -c "\
 		/opt/sui-dev/scripts/deploy.sh && \
 		cd /workspace && \
 		for f in tests/integration_*.js; do \

@@ -6,6 +6,7 @@
 module capsuleer_courier_service::courier_service;
 
 use sui::dynamic_field as df;
+use sui::event;
 use capsuleer_courier_service::config::{ExtensionConfig, AdminCap};
 
 // === Error codes ===
@@ -57,6 +58,27 @@ public struct ItemLikes has store, drop {
 
 public struct NextDeliveryIdKey has copy, drop, store {}
 
+// === Events ===
+
+public struct DeliveryCreated has copy, drop {
+    delivery_id: u64,
+    storage_unit_id: ID,
+    type_id: u64,
+    quantity: u32,
+    receiver: address,
+}
+
+public struct DeliveryFulfilled has copy, drop {
+    delivery_id: u64,
+    courier: address,
+    likes_earned: u64,
+}
+
+public struct DeliveryPickedUp has copy, drop {
+    delivery_id: u64,
+    receiver: address,
+}
+
 // === Public functions ===
 
 /// Request a delivery. Caller becomes the receiver.
@@ -102,6 +124,14 @@ public fun create_delivery_request(
             delivered: false,
         },
     );
+
+    event::emit(DeliveryCreated {
+        delivery_id,
+        storage_unit_id,
+        type_id,
+        quantity,
+        receiver,
+    });
 }
 
 /// Fulfill a delivery request. Caller becomes the sender (courier).
@@ -136,6 +166,12 @@ public fun fulfill_delivery(
     );
     metrics.likes = metrics.likes + likes_earned;
     metrics.deliveries_completed = metrics.deliveries_completed + 1;
+
+    event::emit(DeliveryFulfilled {
+        delivery_id,
+        courier,
+        likes_earned,
+    });
 }
 
 /// Pickup a delivered item. Only the original receiver can call this.
@@ -161,6 +197,11 @@ public fun pickup(
 
     // Remove delivery record
     let _delivery: Delivery = df::remove(config.uid_mut(), key);
+
+    event::emit(DeliveryPickedUp {
+        delivery_id,
+        receiver,
+    });
 }
 
 /// Admin: configure likes reward for an item type.

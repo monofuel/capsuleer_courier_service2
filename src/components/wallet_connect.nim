@@ -70,6 +70,9 @@ proc render(self: WalletConnect) =
         connectedAddress = connectedKeypair.getAddress()
 
         {.emit: """
+        window._courierAddress = `connectedAddress`;""".}
+
+        {.emit: """
         localStorage.setItem('sui_rpc_url', `rpcUrl`);
         localStorage.setItem('sui_private_key', `privKey`);
         """.}
@@ -93,6 +96,7 @@ proc tryAutoConnect*() =
     connectedClient = newSuiClient(savedRpc)
     connectedKeypair = newKeypairFromPrivateKey(savedKey)
     connectedAddress = connectedKeypair.getAddress()
+    {.emit: "window._courierAddress = `connectedAddress`;".}
     let el = document.querySelector("wallet-connect")
     if not el.isNil:
       {.emit: "if (`el`.connectedCallback) `el`.connectedCallback();".}

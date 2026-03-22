@@ -6,7 +6,7 @@ import
   std/[dom, asyncjs],
   sui_client,
   components/[app_shell, wallet_connect, player_stats,
-              create_delivery, courier_actions, admin_panel]
+              create_delivery, courier_actions, admin_panel, delivery_list]
 {.pop.}
 
 proc main() {.async.} =
@@ -15,7 +15,7 @@ proc main() {.async.} =
   echo "Capsuleer Courier Service initialized"
 
   onConnectCallback = proc() =
-    for selector in ["player-stats", "create-delivery", "courier-actions", "admin-panel"]:
+    for selector in ["player-stats", "create-delivery", "courier-actions", "admin-panel", "delivery-list"]:
       let el = document.querySelector(cstring(selector))
       if not el.isNil:
         {.emit: "if (`el`.connectedCallback) `el`.connectedCallback();".}

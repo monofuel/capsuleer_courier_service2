@@ -4,7 +4,7 @@ import
   std/[dom, asyncjs],
   nimponents,
   ../[sui_client, courier_client],
-  ./[wallet_connect, player_stats]
+  ./[wallet_connect, player_stats, delivery_list]
 
 type CourierActions* = ref object of WebComponent
 
@@ -49,6 +49,7 @@ proc render(self: CourierActions) =
         if txResult.isSuccess():
           statusDiv.innerHTML = cstring("Delivered! Digest: " & $txResult.digest())
           refreshStats()
+          refreshDeliveryList()
         else:
           statusDiv.innerHTML = "Transaction failed"
 
@@ -72,6 +73,7 @@ proc render(self: CourierActions) =
         if txResult.isSuccess():
           statusDiv.innerHTML = cstring("Picked up! Digest: " & $txResult.digest())
           refreshStats()
+          refreshDeliveryList()
         else:
           statusDiv.innerHTML = "Transaction failed"
 

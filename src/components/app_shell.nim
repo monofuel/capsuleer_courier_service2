@@ -4,7 +4,7 @@
 import
   std/dom,
   nimponents,
-  ./[wallet_connect, player_stats, create_delivery, courier_actions, admin_panel]
+  ./[wallet_connect, player_stats, create_delivery, courier_actions, admin_panel, delivery_list]
 {.pop.}
 
 type AppShell* = ref object of WebComponent
@@ -26,6 +26,7 @@ proc render(self: AppShell) =
     "<input type=\"text\" id=\"admincap-id\" placeholder=\"0x...\" /></div>" &
     "<button class=\"btn btn-sm\" id=\"save-config\">Save</button></div>" &
     "<div class=\"panels\">" &
+    "<delivery-list></delivery-list>" &
     "<player-stats></player-stats>" &
     "<admin-panel></admin-panel>" &
     "<create-delivery></create-delivery>" &
