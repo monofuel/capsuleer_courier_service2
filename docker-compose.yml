@@ -1,0 +1,21 @@
+services:
+  app:
+    build: .
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./web:/app/web
+
+  sui-dev:
+    build:
+      context: ./docker/sui-dev
+    stdin_open: true
+    tty: true
+    ports:
+      - "9000:9000"
+    volumes:
+      - sui-config:/root/.sui
+      - .:/workspace
+
+volumes:
+  sui-config:

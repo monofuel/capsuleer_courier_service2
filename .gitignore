@@ -1,0 +1,17 @@
+# ignore files with no extension:
+*
+!*/
+!*.*
+!Makefile
+!Dockerfile
+
+# normal ignores:
+*.exe
+nimcache
+/capsuleer_courier_service2
+*.pdb
+*.ilk
+*.out
+.*
+!.gitignore
+nim.cfg
