@@ -31,3 +31,6 @@ package-lock.json
 # Nim JS build output:
 tests/*.js
 tests/*.js.map
+web/app.js
+web/app.js.map
+web/sui-bundle.js

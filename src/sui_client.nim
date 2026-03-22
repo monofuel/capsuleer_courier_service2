@@ -17,18 +17,27 @@ var decodeSuiPrivateKeyFn = null;
 """.}
 
 proc initSuiSdk*(): Future[void] {.async.} =
-  ## Load the @mysten/sui v1.x ESM modules. Must be called once before using the SDK.
+  ## Load the Sui SDK. Works in both environments:
+  ## - Browser: reads from window.SuiSDK (loaded by sui-bundle.js)
+  ## - Node.js: dynamic import from node_modules
   if sdkLoaded:
     return
   {.emit: """
-  const clientMod = await import('@mysten/sui/client');
-  const txMod = await import('@mysten/sui/transactions');
-  const kpMod = await import('@mysten/sui/keypairs/ed25519');
-  const cryptoMod = await import('@mysten/sui/cryptography');
-  SuiClientClass = clientMod.SuiClient;
-  TransactionClass = txMod.Transaction;
-  Ed25519KeypairClass = kpMod.Ed25519Keypair;
-  decodeSuiPrivateKeyFn = cryptoMod.decodeSuiPrivateKey;
+  if (typeof window !== 'undefined' && window.SuiSDK) {
+    SuiClientClass = window.SuiSDK.SuiClient;
+    TransactionClass = window.SuiSDK.Transaction;
+    Ed25519KeypairClass = window.SuiSDK.Ed25519Keypair;
+    decodeSuiPrivateKeyFn = window.SuiSDK.decodeSuiPrivateKey;
+  } else {
+    const clientMod = await import('@mysten/sui/client');
+    const txMod = await import('@mysten/sui/transactions');
+    const kpMod = await import('@mysten/sui/keypairs/ed25519');
+    const cryptoMod = await import('@mysten/sui/cryptography');
+    SuiClientClass = clientMod.SuiClient;
+    TransactionClass = txMod.Transaction;
+    Ed25519KeypairClass = kpMod.Ed25519Keypair;
+    decodeSuiPrivateKeyFn = cryptoMod.decodeSuiPrivateKey;
+  }
   """.}
   sdkLoaded = true
 

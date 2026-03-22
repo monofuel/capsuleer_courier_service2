@@ -1,4 +1,4 @@
-.PHONY: test integration-test e2e-test build docker-build docker-build-push serve move-build move-test deploy-local npm-install integration-build
+.PHONY: test integration-test e2e-test build docker-build docker-build-push serve move-build move-test deploy-local npm-install integration-build frontend-bundle frontend-build frontend-dev
 
 DOCKER_IMAGE ?= gitea.solution-nine.monofuel.dev/monolab/capsuleer_courier_service2:latest
 DOCKER_PLATFORM ?= linux/amd64
@@ -67,7 +67,16 @@ e2e-test: nim.cfg
 		echo "No e2e tests found in tests/e2e_*.nim"; \
 	fi
 
-serve: build
+frontend-bundle:
+	docker compose run --rm --entrypoint bash sui-dev -c "cd /workspace && npx esbuild sui-bridge.js --bundle --outfile=web/sui-bundle.js --format=iife"
+
+frontend-build: nim.cfg frontend-bundle
+	nim js -d:release -o:web/app.js src/web.nim
+
+frontend-dev: nim.cfg frontend-bundle
+	nim js -o:web/app.js src/web.nim
+
+serve: build frontend-dev
 	./capsuleer_courier_service2
 
 MOVE_DIR = move-contracts/capsuleer_courier_service
@@ -76,7 +85,7 @@ move-build:
 	docker compose run --rm --entrypoint bash sui-dev -c "cd /workspace/$(MOVE_DIR) && sui move build -e testnet"
 
 move-test:
-	docker compose run --rm --entrypoint bash sui-dev -c "cd /workspace/$(MOVE_DIR) && sui move test"
+	docker compose run --rm --entrypoint bash -e SUI_CONFIG_DIR=/tmp/sui-test sui-dev -c "cd /workspace/$(MOVE_DIR) && sui move test"
 
 deploy-local:
 	docker compose run --rm --service-ports sui-dev bash /opt/sui-dev/scripts/deploy.sh
