@@ -9,7 +9,7 @@
 ## Major changes
 
 - use Sui Move for the smart contracts
-- build a whole new custom frontend with HTMX and nimponents
+- build a whole new custom frontend with nimponents (Nim compiled to JS via `nim js`)
 
 - for testing we can use a simple localhost http server
 - capsuleer_courier_service required an http server to host stuff. but for the new v2, I would like instead to use their new "walrus" blob storage system. but this will be a ways down the road.
@@ -18,8 +18,8 @@
 
 - similar to scriptorium in project structure
 - Makefile, unit, integration, e2e tests, etc
-- use HTMX for the frontend
-- use nimponents for any custom components
+- use nimponents for web components (compiled to JS via `nim js`)
+- no HTMX — dApp is fully client-side, no backend to return HTML fragments
 
 - do not install any new system dependencies (eg: rust, python, move compiler, etc)
 - let's stick to using docker as much as possible.
@@ -45,7 +45,7 @@
 
 ## Nim References
 
-- andrewlytics is a good example of a Nim HTMX webapp
+- andrewlytics is a good example of a Nim webapp (mummy server, nimponents)
   - /home/monofuel/Documents/Projects/Andrewlytics/andrewlytics
 - scriptorium is a good reference of how I like to organize nim projects (makefile, unit, integration, e2e tests, etc)
   - /home/monofuel/Documents/Projects/Racha/scriptorium
