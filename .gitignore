@@ -23,3 +23,11 @@ Move.lock
 
 # Generated env and deployment files:
 deployments/
+
+# Node.js:
+node_modules/
+package-lock.json
+
+# Nim JS build output:
+tests/*.js
+tests/*.js.map

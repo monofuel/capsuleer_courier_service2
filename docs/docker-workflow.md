@@ -93,6 +93,26 @@ sui-dev:
 
 The Move.toml uses `local = "../world-contracts/contracts/world"` which resolves inside the container because of how the volumes are mounted.
 
+## Known Issues
+
+### Stale `Pub.localnet.toml` after regenesis
+
+`--force-regenesis` creates a new chain with a new chain ID on every `sui start`. But `sui client test-publish` generates a `Pub.localnet.toml` file that contains the chain ID. If this file persists from a previous run (e.g. in the mounted world-contracts volume), the next `test-publish` will fail:
+
+```
+Ephemeral publication file "Pub.localnet.toml" has chain-id `9ff087ec`; it cannot be used to publish to chain with id `084a55b7`
+```
+
+**Fix:** `deploy.sh` cleans stale `Pub.localnet.toml` files before deploying. If you're running `test-publish` manually, delete them first:
+```bash
+find /workspace/world-contracts -name "Pub.localnet.toml" -delete
+find /workspace/move-contracts -name "Pub.localnet.toml" -delete
+```
+
+### Scripts path: `/opt/sui-dev/scripts/`
+
+The Dockerfile copies scripts to `/opt/sui-dev/scripts/` (NOT `/workspace/scripts/`). This is because the project volume mount `.:/workspace` would overwrite any files COPY'd to `/workspace/`. The entrypoint is at `/opt/sui-dev/scripts/entrypoint.sh`.
+
 ## app Container
 
 Simple — builds the Nim project and serves static files:

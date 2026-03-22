@@ -1,4 +1,4 @@
-.PHONY: test integration-test e2e-test build docker-build docker-build-push serve move-build move-test deploy-local
+.PHONY: test integration-test e2e-test build docker-build docker-build-push serve move-build move-test deploy-local npm-install integration-build
 
 DOCKER_IMAGE ?= gitea.solution-nine.monofuel.dev/monolab/capsuleer_courier_service2:latest
 DOCKER_PLATFORM ?= linux/amd64
@@ -30,17 +30,30 @@ test: nim.cfg
 	done; \
 	exit $$fail
 
-integration-test: nim.cfg
-	@found=0; \
-	for f in tests/integration_*.nim; do \
-		[ -e "$$f" ] || continue; \
-		found=1; \
-		echo "--- $$f ---"; \
-		nim r $(NIM_TEST_FLAGS) "$$f" || exit 1; \
-	done; \
-	if [ $$found -eq 0 ]; then \
+npm-install:
+	docker compose run --rm --entrypoint bash sui-dev -c "cd /workspace && npm install"
+
+integration-build: nim.cfg
+	@files=$$(ls tests/integration_*.nim 2>/dev/null); \
+	if [ -z "$$files" ]; then \
 		echo "No integration tests found in tests/integration_*.nim"; \
-	fi
+		exit 0; \
+	fi; \
+	for f in $$files; do \
+		outfile=$$(echo "$$f" | sed 's/\.nim$$/.js/'); \
+		echo "Compiling $$f -> $$outfile"; \
+		nim js $(NIM_TEST_FLAGS) -o:"$$outfile" "$$f" || exit 1; \
+	done
+
+integration-test: integration-build
+	docker compose run --rm --service-ports sui-dev bash -c "\
+		/opt/sui-dev/scripts/deploy.sh && \
+		cd /workspace && \
+		for f in tests/integration_*.js; do \
+			[ -e \"\$$f\" ] || continue; \
+			echo '--- '\"\$$f\"' ---'; \
+			node \"\$$f\" || exit 1; \
+		done"
 
 e2e-test: nim.cfg
 	@found=0; \

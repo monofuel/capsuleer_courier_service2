@@ -11,6 +11,11 @@ ENV_FILE="$WORKSPACE/.env.deploy"
 
 mkdir -p "$DEPLOY_DIR"
 
+# Clean stale publication files from previous chain (force-regenesis changes chain ID)
+echo "[deploy] Cleaning stale publication files..."
+find "$WORLD_DIR" -name "Pub.localnet.toml" -delete 2>/dev/null || true
+find "$COURIER_DIR" -name "Pub.localnet.toml" -delete 2>/dev/null || true
+
 echo "[deploy] Deploying world contracts..."
 sui client switch --address ADMIN
 cd "$WORLD_DIR/contracts/world"
