@@ -44,61 +44,37 @@
   - [x] test error cases (bad quantity, max pending, no likes, wrong receiver, not delivered, already delivered, nonexistent)
 - [x] `make move-build` and `make move-test` targets (run via docker, no host sui CLI needed)
 
-### Phase 3: Local Sui Dev Environment
-- [ ] add Sui node to docker-compose (reference builder-scaffold/docker/)
-  - [ ] local Sui node with pre-funded test accounts
-  - [ ] persist keys in docker volume
-- [ ] create deployment scripts
-  - [ ] deploy world contracts to local node
-  - [ ] publish courier service extension
-  - [ ] extract BUILDER_PACKAGE_ID and EXTENSION_CONFIG_ID from publish output
-- [ ] create `.env.example` with all required config vars
-- [ ] add `make deploy-local` target
-- [ ] verify: deploy contracts → query state → confirm objects exist
+### Phase 3: Local Sui Dev Environment ✅
+- [x] sui-dev container with local Sui node, pre-funded accounts (ADMIN, PLAYER_A, PLAYER_B)
+- [x] `deploy.sh` — deploys world-contracts + courier service, extracts all IDs
+- [x] `.env.example` with all config vars
+- [x] `make deploy-local` target
+- [x] stale `Pub.localnet.toml` cleanup on each deploy (force-regenesis changes chain ID)
 
-### Phase 4: Contract Integration Scripts
-- [ ] TypeScript (or Nim) scripts for contract interaction
-  - [ ] `configure-likes` — set likes values for item types
-  - [ ] `create-delivery` — create a test delivery request
-  - [ ] `fulfill-delivery` — fulfill a delivery as courier
-  - [ ] `pickup-delivery` — pickup as receiver
-  - [ ] `query-deliveries` — list active deliveries for a storage unit
-  - [ ] `query-player-metrics` — check likes and stats
-- [ ] integration tests: full delivery lifecycle against local node
-  - [ ] create request → fulfill → pickup → verify metrics
-  - [ ] test error cases (duplicate pickup, wrong receiver, etc.)
-- [ ] add `make integration-test` target
+### Phase 4: Contract Integration Scripts ✅
+- [x] Nim JS wrapper for @mysten/sui v1.x SDK (`src/sui_client.nim`)
+  - [x] dual environment: browser (window.SuiSDK) + Node.js (dynamic import)
+  - [x] client, keypair, transaction building, sign & execute
+- [x] high-level courier client (`src/courier_client.nim`)
+  - [x] set_likes, create_delivery_request, fulfill_delivery, pickup
+- [x] integration tests (6 passing): full delivery lifecycle against live local node
+  - [x] set_likes → create → fulfill → pickup + error cases
+- [x] `make integration-test` target (deploys contracts, runs tests)
+- [x] docs: `nim-js-sui-interop.md` — SDK version issues, ESM imports, interop patterns
 
-### Phase 5: Nimponents Frontend (fully client-side dApp)
-- [ ] set up frontend structure
-  - [ ] `web/` directory with HTML shell, CSS, images
-  - [ ] nimponents web components compiled to JS via `nim js`
-  - [ ] no HTMX — dApp is fully client-side, talks directly to Sui chain
-- [ ] Sui client-side integration (all in Nim JS / nimponents)
-  - [ ] connect to EVE Vault wallet extension
-  - [ ] query chain state via Sui JSON-RPC / GraphQL directly from browser
-  - [ ] build and sign transactions client-side
-  - [ ] sponsored transaction support (EVE Vault)
-- [ ] pages and components
-  - [ ] main layout / app shell
-  - [ ] wallet connect / disconnect
-  - [ ] storage unit view — list delivery requests for an SSU (queried from chain)
-  - [ ] create delivery form — select item type, quantity, sign & submit tx
-  - [ ] courier view — unfulfilled requests available to deliver
-  - [ ] pickup view — items ready for receiver to collect
-  - [ ] player stats — likes earned, deliveries completed
-- [ ] add `make frontend-build` target (nim js compilation)
+### Phase 5: Nimponents Frontend ✅
+- [x] esbuild bundles @mysten/sui into `web/sui-bundle.js` (280KB, window.SuiSDK globals)
+- [x] nimponents web components compiled to `web/app.js` via `nim js`
+- [x] components: wallet_connect, player_stats, create_delivery, courier_actions, admin_panel, app_shell
+- [x] EVE-themed dark CSS
+- [x] `make frontend-build` / `make frontend-dev` / `make serve` targets
+- [ ] EVE Vault wallet adapter integration (stretch — currently dev-mode with private key input)
+- [ ] on-chain query for player metrics (stretch — devInspect not yet working in browser)
 
-### Phase 6: Static File Serving (for local dev)
-- [ ] simple Nim static file server (mummy) — serves `web/` directory only
-  - [ ] no API endpoints, no server-side logic
-  - [ ] just serves HTML/JS/CSS for local testing
-- [ ] alternatively: use `python -m http.server` or similar during dev
-- [ ] docker-compose for local dev
-  - [ ] Sui local node
-  - [ ] contract deployment (init container or script)
-  - [ ] static file server
-- [ ] `make up` / `make down` / `make serve` targets
+### Phase 6: Static File Serving ✅
+- [x] mummy static file server (built in Phase 1, serves `web/` directory)
+- [x] docker-compose with app + sui-dev services
+- [x] `make serve` builds frontend and starts server on port 8080
 
 ### Phase 8: Testnet Deployment (requires manual steps)
 - [ ] obtain Sui testnet credentials and faucet tokens

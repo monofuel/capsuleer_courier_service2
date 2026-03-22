@@ -1,0 +1,32 @@
+name: Integration Tests
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - uses: treeform/setup-nim-action@v6
+
+      - name: Install npm dependencies
+        run: npm install
+
+      - name: Sync Nim dependencies
+        run: nimby sync -g nimby.lock
+
+      - name: Compile integration tests
+        run: make integration-build
+
+      - name: Run integration tests
+        run: make integration-test

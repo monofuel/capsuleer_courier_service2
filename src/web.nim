@@ -1,24 +1,23 @@
 ## Frontend entry point — compiled to web/app.js via `nim js`.
 ## Imports all nimponents components (they self-register on import).
 
-import std/[dom, jsffi, asyncjs]
-import sui_client
-import components/[app_shell, wallet_connect, player_stats, create_delivery, courier_actions]
+{.push warning[UnusedImport]: off.}
+import
+  std/[dom, asyncjs],
+  sui_client,
+  components/[app_shell, wallet_connect, player_stats,
+              create_delivery, courier_actions, admin_panel]
+{.pop.}
 
 proc main() {.async.} =
+  ## Initialize the Sui SDK and set up wallet callbacks.
   await initSuiSdk()
   echo "Capsuleer Courier Service initialized"
 
-  # Set up wallet connect callback to refresh components
   onConnectCallback = proc() =
-    let stats = document.querySelector("player-stats")
-    if not stats.isNil:
-      {.emit: "if (`stats`.render) `stats`.render();".}
-    let create = document.querySelector("create-delivery")
-    if not create.isNil:
-      {.emit: "if (`create`.render) `create`.render();".}
-    let actions = document.querySelector("courier-actions")
-    if not actions.isNil:
-      {.emit: "if (`actions`.render) `actions`.render();".}
+    for selector in ["player-stats", "create-delivery", "courier-actions", "admin-panel"]:
+      let el = document.querySelector(cstring(selector))
+      if not el.isNil:
+        {.emit: "if (`el`.connectedCallback) `el`.connectedCallback();".}
 
 discard main()

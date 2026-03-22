@@ -1,0 +1,79 @@
+name: Build And Test
+
+on:
+  push:
+    branches:
+      - master
+    tags:
+      - "v*"
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: treeform/setup-nim-action@v6
+      - run: nimby sync -g nimby.lock
+      - run: make test
+
+  move-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      - name: Install Sui CLI
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/MystenLabs/suiup/main/install.sh | sh
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+          echo "$HOME/.suiup/bin" >> $GITHUB_PATH
+
+      - name: Install Sui
+        run: echo y | suiup install sui
+
+      - name: Clone world-contracts
+        run: git clone --depth 1 https://github.com/evefrontier/world-contracts.git ../world-contracts
+
+      - name: Run Move tests
+        run: SUI_CONFIG_DIR=/tmp/sui-test sui move test
+        working-directory: move-contracts/capsuleer_courier_service
+
+  build:
+    runs-on: ubuntu-latest
+    needs: [test, move-test]
+    if: github.event_name == 'push'
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: treeform/setup-nim-action@v6
+      - run: nimby sync -g nimby.lock
+      - run: make build
+
+  frontend:
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - uses: treeform/setup-nim-action@v6
+
+      - name: Install npm dependencies
+        run: npm install
+
+      - name: Sync Nim dependencies
+        run: nimby sync -g nimby.lock
+
+      - name: Bundle Sui SDK
+        run: npx esbuild sui-bridge.js --bundle --outfile=web/sui-bundle.js --format=iife
+
+      - name: Build frontend
+        run: nim js -d:release -o:web/app.js src/web.nim

@@ -15,6 +15,7 @@ nimcache
 .*
 !.gitignore
 !.env.example
+!.github
 nim.cfg
 
 # Move build artifacts:

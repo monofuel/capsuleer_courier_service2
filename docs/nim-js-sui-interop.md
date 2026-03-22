@@ -4,18 +4,11 @@
 
 We use `nim js` to compile Nim code that wraps the `@mysten/sui` TypeScript SDK. This gives us a Nim-native API for building and executing Sui transactions, which works in both Node.js (for scripts/tests) and the browser (for the frontend, with a bundler).
 
-## SDK Version: v1.x only
+## SDK Version
 
-**Use `@mysten/sui` v1.21.1. Do NOT use v2.x.**
+**We use `@mysten/sui` v1.21.1** which exports `SuiClient` with a complete, working API.
 
-The v2.x SDK (`^2.0.0` through at least `2.9.1`) has a broken `CoreClient` class:
-- `SuiClient` was renamed to `CoreClient`
-- `CoreClient` is missing `resolveTransactionPlugin()` method
-- `Transaction.build()` calls `getClient(options).core?.resolveTransactionPlugin()` which fails because the method doesn't exist
-- This is a bug in the SDK — the code should use optional chaining on the call (`?.()`) but doesn't
-- The fallback `coreClientResolveTransactionPlugin` also fails because it calls `getMoveFunction()` which doesn't exist on `CoreClient`
-
-v1.x exports `SuiClient` which has the full API and works correctly.
+The v2.x SDK (`^2.0.0` through at least `2.9.1`) renamed `SuiClient` to `CoreClient` and introduced a broken `resolveTransactionPlugin` call chain that prevents `Transaction.build()` from working. If you need to upgrade to v2.x in the future, you may need to patch `CoreClient.prototype.resolveTransactionPlugin` to return `null`.
 
 ## ESM-Only Package
 
@@ -145,4 +138,39 @@ nim js -o:output.js src/myfile.nim
 node output.js
 ```
 
-No bundler needed for Node.js — `import()` resolves from `node_modules/` at runtime. For browser use (Phase 5), a bundler will be needed.
+No bundler needed for Node.js — `import()` resolves from `node_modules/` at runtime.
+
+## Browser Bundling (esbuild)
+
+Browsers have no `node_modules/`. We use **Option A: Global Bridge** — esbuild bundles npm deps into a single file that sets `window.SuiSDK`, and the Nim JS output reads from that global.
+
+**`sui-bridge.js`** (project root, ~10 lines):
+```js
+import { SuiClient } from '@mysten/sui/client';
+import { Transaction } from '@mysten/sui/transactions';
+// ... etc
+window.SuiSDK = { SuiClient, Transaction, Ed25519Keypair, decodeSuiPrivateKey };
+```
+
+**Bundle it:**
+```bash
+npx esbuild sui-bridge.js --bundle --outfile=web/sui-bundle.js --format=iife
+# Produces ~280KB browser-ready file
+```
+
+**`initSuiSdk()` detects the environment automatically:**
+- Browser: reads from `window.SuiSDK` (loaded by `sui-bundle.js`)
+- Node.js: dynamic `import()` from `node_modules/`
+
+**HTML loads both scripts:**
+```html
+<script src="sui-bundle.js"></script>  <!-- npm deps as globals -->
+<script src="app.js"></script>         <!-- Nim JS output -->
+```
+
+**Makefile targets:**
+```bash
+make frontend-bundle  # esbuild only
+make frontend-dev     # bundle + nim js (debug)
+make frontend-build   # bundle + nim js (release)
+```

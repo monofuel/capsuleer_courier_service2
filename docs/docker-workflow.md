@@ -69,6 +69,21 @@ make move-test
 
 Both run inside the sui-dev container. The project is mounted at `/workspace` and world-contracts at `/workspace/world-contracts`.
 
+**Note:** `make move-test` uses `SUI_CONFIG_DIR=/tmp/sui-test` to avoid conflicts with the local Sui node config. Without this, `sui move test` complains about the active environment not matching Move.toml's `[environments]`.
+
+### Contract Deployment
+
+```bash
+make deploy-local
+```
+
+Runs the full pipeline: start local Sui node → fund accounts → deploy world-contracts → publish courier service. Outputs are written to two files:
+
+| File | Contents |
+|------|----------|
+| `.env.sui` | Network config + account addresses and keys (from entrypoint.sh) |
+| `.env.deploy` | Contract IDs: WORLD_PACKAGE_ID, BUILDER_PACKAGE_ID, EXTENSION_CONFIG_ID, ADMIN_CAP_ID (from deploy.sh) |
+
 ### Manual Build/Test
 
 ```bash
@@ -78,7 +93,7 @@ docker compose run --rm sui-dev
 # Inside container:
 cd /workspace/move-contracts/capsuleer_courier_service
 sui move build -e testnet
-sui move test
+SUI_CONFIG_DIR=/tmp/sui-test sui move test
 ```
 
 ## Volume Mounts

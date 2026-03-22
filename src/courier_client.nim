@@ -1,18 +1,18 @@
 ## High-level client for the Capsuleer Courier Service Move contracts.
 ## Wraps sui_client.nim with domain-specific operations.
 
-import std/[jsffi, asyncjs, strformat]
-import sui_client
+import
+  std/asyncjs,
+  sui_client
 
 const
   CourierModule* = "courier_service"
 
-# --- Admin operations ---
-
 proc setLikes*(client: SuiClient, keypair: Keypair, configId, adminCapId, packageId: cstring,
                typeId: cstring, likes: cstring): Future[TransactionResult] {.async.} =
+  ## Configure likes reward for an item type. Requires AdminCap.
   let tx = newTransaction()
-  let target = cstring(&"{packageId}::{CourierModule}::set_likes")
+  let target = cstring($packageId & "::" & CourierModule & "::set_likes")
   tx.moveCall(target, [
     tx.txObject(configId),
     tx.txObject(adminCapId),
@@ -21,12 +21,11 @@ proc setLikes*(client: SuiClient, keypair: Keypair, configId, adminCapId, packag
   ])
   result = await client.signAndExecuteTransaction(tx, keypair)
 
-# --- Player operations ---
-
 proc createDeliveryRequest*(client: SuiClient, keypair: Keypair, configId, packageId: cstring,
                             storageUnitId: cstring, typeId: cstring, quantity: int): Future[TransactionResult] {.async.} =
+  ## Request a delivery. Caller becomes the receiver.
   let tx = newTransaction()
-  let target = cstring(&"{packageId}::{CourierModule}::create_delivery_request")
+  let target = cstring($packageId & "::" & CourierModule & "::create_delivery_request")
   tx.moveCall(target, [
     tx.txObject(configId),
     tx.txPureAddress(storageUnitId),
@@ -37,8 +36,9 @@ proc createDeliveryRequest*(client: SuiClient, keypair: Keypair, configId, packa
 
 proc fulfillDelivery*(client: SuiClient, keypair: Keypair, configId, packageId: cstring,
                       deliveryId: cstring): Future[TransactionResult] {.async.} =
+  ## Fulfill a delivery request. Caller becomes the courier.
   let tx = newTransaction()
-  let target = cstring(&"{packageId}::{CourierModule}::fulfill_delivery")
+  let target = cstring($packageId & "::" & CourierModule & "::fulfill_delivery")
   tx.moveCall(target, [
     tx.txObject(configId),
     tx.txPureU64(deliveryId),
@@ -47,8 +47,9 @@ proc fulfillDelivery*(client: SuiClient, keypair: Keypair, configId, packageId: 
 
 proc pickup*(client: SuiClient, keypair: Keypair, configId, packageId: cstring,
              deliveryId: cstring): Future[TransactionResult] {.async.} =
+  ## Pick up a delivered item. Only the original receiver can call this.
   let tx = newTransaction()
-  let target = cstring(&"{packageId}::{CourierModule}::pickup")
+  let target = cstring($packageId & "::" & CourierModule & "::pickup")
   tx.moveCall(target, [
     tx.txObject(configId),
     tx.txPureU64(deliveryId),
