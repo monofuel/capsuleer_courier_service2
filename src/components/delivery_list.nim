@@ -16,29 +16,36 @@ proc connectedCallback(self: DeliveryList) =
 
   self.innerHTML = "<div class=\"panel\"><h3>Deliveries</h3><p class=\"loading-text\">Loading...</p></div>"
 
+  # Capture element reference into a global JS var.
+  # Nim hoists async procs to top level, so closures don't work.
+  {.emit: "window.window._dlEl = `self`;".}
+
   var rpcUrl: cstring
   {.emit: "`rpcUrl` = localStorage.getItem('sui_rpc_url') || 'http://127.0.0.1:9000';".}
 
   proc load() {.async.} =
     let deliveries = await queryDeliveries(rpcUrl, packageId)
 
-    # Render entirely in JS to avoid mangled name references.
     {.emit: """
-    function truncAddr(a) {
+    var _dlData = `deliveries`;
+
+    function _dlTruncAddr(a) {
       if (!a || a.length <= 12) return a || '';
       return a.slice(0, 6) + '...' + a.slice(-4);
     }
 
-    function renderTable(tab) {
-      const connAddr = window._courierAddress || '';
-      let html = '<div class="panel">' +
+    function _dlRenderTable(tab) {
+      var connAddr = window._courierAddress || '';
+      var html = '<div class="panel">' +
         '<div class="panel-header">' +
         '<h3>Deliveries</h3>' +
         '<div class="tab-bar">';
 
-      for (const t of ['all', 'my-requests', 'available']) {
-        const label = t === 'all' ? 'All' : t === 'my-requests' ? 'My Requests' : 'Available';
-        const cls = t === tab ? ' active' : '';
+      var tabs = ['all', 'my-requests', 'available'];
+      for (var ti = 0; ti < tabs.length; ti++) {
+        var t = tabs[ti];
+        var label = t === 'all' ? 'All' : t === 'my-requests' ? 'My Requests' : 'Available';
+        var cls = t === tab ? ' active' : '';
         html += '<button class="tab' + cls + '" data-tab="' + t + '">' + label + '</button>';
       }
 
@@ -49,13 +56,14 @@ proc connectedCallback(self: DeliveryList) =
         '<th>ID</th><th>Type</th><th>Qty</th><th>Receiver</th><th>Courier</th><th>Status</th>' +
         '</tr></thead><tbody>';
 
-      let count = 0;
-      for (const d of `deliveries`) {
-        const dd = d.Field1 || d;
-        const recv = dd.receiver || '';
-        const delivered = !!dd.delivered;
+      var count = 0;
+      for (var di = 0; di < _dlData.length; di++) {
+        var d = _dlData[di];
+        var dd = d.Field1 || d;
+        var recv = dd.receiver || '';
+        var delivered = !!dd.delivered;
 
-        let show = false;
+        var show = false;
         if (tab === 'all') show = true;
         else if (tab === 'my-requests') show = (recv === connAddr);
         else if (tab === 'available') show = (!delivered && recv !== connAddr);
@@ -63,16 +71,16 @@ proc connectedCallback(self: DeliveryList) =
         if (!show) continue;
         count++;
 
-        const courier = dd.courier || '';
-        const statusCls = delivered ? 'status-delivered' : 'status-pending';
-        const statusTxt = delivered ? 'Awaiting Pickup' : 'Pending';
+        var courier = dd.courier || '';
+        var statusCls = delivered ? 'status-delivered' : 'status-pending';
+        var statusTxt = delivered ? 'Awaiting Pickup' : 'Pending';
 
         html += '<tr>' +
           '<td>' + dd.deliveryId + '</td>' +
           '<td>' + dd.typeId + '</td>' +
           '<td>' + dd.quantity + '</td>' +
-          '<td>' + truncAddr(recv) + '</td>' +
-          '<td>' + (courier ? truncAddr(courier) : '\u2014') + '</td>' +
+          '<td>' + _dlTruncAddr(recv) + '</td>' +
+          '<td>' + (courier ? _dlTruncAddr(courier) : '\u2014') + '</td>' +
           '<td><span class="' + statusCls + '">' + statusTxt + '</span></td>' +
           '</tr>';
       }
@@ -82,28 +90,27 @@ proc connectedCallback(self: DeliveryList) =
       }
 
       html += '</tbody></table></div>';
-      `self`.innerHTML = html;
+      window._dlEl.innerHTML = html;
 
-      // Attach tab handlers.
-      `self`.querySelectorAll('.tab').forEach(function(btn) {
-        btn.addEventListener('click', function() {
-          const newTab = this.getAttribute('data-tab');
+      var tabBtns = window._dlEl.querySelectorAll('.tab');
+      for (var bi = 0; bi < tabBtns.length; bi++) {
+        tabBtns[bi].addEventListener('click', function() {
+          var newTab = this.getAttribute('data-tab');
           localStorage.setItem('delivery_tab', newTab);
-          renderTable(newTab);
+          _dlRenderTable(newTab);
         });
-      });
+      }
 
-      // Attach refresh handler.
-      const refreshBtn = `self`.querySelector('#refresh-deliveries');
+      var refreshBtn = window._dlEl.querySelector('#refresh-deliveries');
       if (refreshBtn) {
         refreshBtn.addEventListener('click', function() {
-          `self`.connectedCallback();
+          if (window._dlEl.connectedCallback) window._dlEl.connectedCallback();
         });
       }
     }
 
-    const tab = localStorage.getItem('delivery_tab') || 'all';
-    renderTable(tab);
+    var tab = localStorage.getItem('delivery_tab') || 'all';
+    _dlRenderTable(tab);
     """.}
 
   runWithErrorHandler(load(), self)
@@ -114,7 +121,7 @@ proc refreshDeliveryList*() =
   ## Re-render all delivery-list elements.
   let elements = document.querySelectorAll("delivery-list")
   {.emit: """
-  for (let i = 0; i < `elements`.length; i++) {
+  for (var i = 0; i < `elements`.length; i++) {
     if (`elements`[i].connectedCallback) `elements`[i].connectedCallback();
   }
   """.}

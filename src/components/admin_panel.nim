@@ -45,6 +45,7 @@ proc render(self: AdminPanel) =
         let txResult = await connectedClient.setLikes(
           connectedKeypair, configId, adminCapId, packageId, typeId, likesVal)
         if txResult.isSuccess():
+          discard await connectedClient.waitForTransaction(txResult.digest())
           statusDiv.innerHTML = cstring("Likes set! Digest: " & $txResult.digest())
         else:
           statusDiv.innerHTML = "Transaction failed"

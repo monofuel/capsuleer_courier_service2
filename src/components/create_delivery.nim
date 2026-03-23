@@ -54,7 +54,10 @@ proc render(self: CreateDelivery) =
           connectedKeypair, configId, packageId, ssuId, typeId, qty)
         if txResult.isSuccess():
           statusDiv.innerHTML = cstring("Delivery requested! Digest: " & $txResult.digest())
+          discard await connectedClient.waitForTransaction(txResult.digest())
           refreshStats()
+          # Delay to allow event indexing before refresh.
+          {.emit: "await new Promise(function(r) { setTimeout(r, 1000); });".}
           refreshDeliveryList()
         else:
           statusDiv.innerHTML = "Transaction failed"

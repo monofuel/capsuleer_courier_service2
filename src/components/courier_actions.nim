@@ -48,7 +48,9 @@ proc render(self: CourierActions) =
           connectedKeypair, configId, packageId, deliveryId)
         if txResult.isSuccess():
           statusDiv.innerHTML = cstring("Delivered! Digest: " & $txResult.digest())
+          discard await connectedClient.waitForTransaction(txResult.digest())
           refreshStats()
+          {.emit: "await new Promise(function(r) { setTimeout(r, 1000); });".}
           refreshDeliveryList()
         else:
           statusDiv.innerHTML = "Transaction failed"
@@ -72,7 +74,9 @@ proc render(self: CourierActions) =
           connectedKeypair, configId, packageId, deliveryId)
         if txResult.isSuccess():
           statusDiv.innerHTML = cstring("Picked up! Digest: " & $txResult.digest())
+          discard await connectedClient.waitForTransaction(txResult.digest())
           refreshStats()
+          {.emit: "await new Promise(function(r) { setTimeout(r, 1000); });".}
           refreshDeliveryList()
         else:
           statusDiv.innerHTML = "Transaction failed"
