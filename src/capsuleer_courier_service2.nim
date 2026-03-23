@@ -39,14 +39,16 @@ proc serveStaticFile(request: Request) =
   request.respond(200, headers, content)
 
 proc main() =
-  let port = Port(DefaultPort)
+  ## Start the static file server.
+  let portNum = parseInt(getEnv("PORT", $DefaultPort))
+  let port = Port(portNum)
   var router: Router
   router.get("/", serveStaticFile)
   router.get("/**", serveStaticFile)
 
   let server = newServer(router)
-  echo &"Capsuleer Courier Service v{Version}"
-  echo &"Serving {DefaultWebDir}/ on http://localhost:{DefaultPort}"
+  echo "Capsuleer Courier Service v" & Version
+  echo "Serving " & DefaultWebDir & "/ on http://localhost:" & $portNum
   server.serve(port)
 
 when isMainModule:

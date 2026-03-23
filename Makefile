@@ -57,16 +57,7 @@ integration-test: integration-build
 		done"
 
 e2e-test: nim.cfg
-	@found=0; \
-	for f in tests/e2e_*.nim; do \
-		[ -e "$$f" ] || continue; \
-		found=1; \
-		echo "--- $$f ---"; \
-		nim r $(NIM_TEST_FLAGS) "$$f" || exit 1; \
-	done; \
-	if [ $$found -eq 0 ]; then \
-		echo "No e2e tests found in tests/e2e_*.nim"; \
-	fi
+	@bash tests/e2e_frontend_smoke.sh
 
 frontend-bundle:
 	docker compose run --rm --entrypoint bash sui-dev -c "cd /workspace && npx esbuild sui-bridge.js --bundle --outfile=web/sui-bundle.js --format=iife"
