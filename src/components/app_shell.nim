@@ -24,6 +24,8 @@ proc render(self: AppShell) =
     "<input type=\"text\" id=\"config-id\" placeholder=\"0x...\" /></div>" &
     "<div class=\"form-group\"><label>AdminCap ID</label>" &
     "<input type=\"text\" id=\"admincap-id\" placeholder=\"0x...\" /></div>" &
+    "<div class=\"form-group\"><label>Display Name</label>" &
+    "<input type=\"text\" id=\"display-name\" placeholder=\"Your name\" /></div>" &
     "<button class=\"btn btn-sm\" id=\"save-config\">Save</button></div>" &
     "<div class=\"panels\">" &
     "<delivery-list></delivery-list>" &
@@ -36,22 +38,26 @@ proc render(self: AppShell) =
   )
 
   # Load saved config.
-  var savedPkg, savedCfg, savedCap: cstring
+  var savedPkg, savedCfg, savedCap, savedName: cstring
   {.emit: """
   `savedPkg` = localStorage.getItem('courier_package_id') || '';
   `savedCfg` = localStorage.getItem('courier_config_id') || '';
   `savedCap` = localStorage.getItem('courier_admincap_id') || '';
+  `savedName` = localStorage.getItem('courier_display_name') || '';
   """.}
 
   let pkgInput = self.querySelector("#package-id").InputElement
   let cfgInput = self.querySelector("#config-id").InputElement
   let capInput = self.querySelector("#admincap-id").InputElement
+  let nameInput = self.querySelector("#display-name").InputElement
   if not pkgInput.isNil:
     pkgInput.value = savedPkg
   if not cfgInput.isNil:
     cfgInput.value = savedCfg
   if not capInput.isNil:
     capInput.value = savedCap
+  if not nameInput.isNil:
+    nameInput.value = savedName
 
   if savedPkg.len > 0:
     packageId = savedPkg
@@ -66,6 +72,7 @@ proc render(self: AppShell) =
       let pkg = self.querySelector("#package-id").InputElement.value
       let cfg = self.querySelector("#config-id").InputElement.value
       let cap = self.querySelector("#admincap-id").InputElement.value
+      let displayName = self.querySelector("#display-name").InputElement.value
       packageId = pkg
       configId = cfg
       adminCapId = cap
@@ -73,6 +80,11 @@ proc render(self: AppShell) =
       localStorage.setItem('courier_package_id', `pkg`);
       localStorage.setItem('courier_config_id', `cfg`);
       localStorage.setItem('courier_admincap_id', `cap`);
+      localStorage.setItem('courier_display_name', `displayName`);
+      if (`displayName` && window._courierAddress) {
+        if (!window._nameCache) window._nameCache = {};
+        window._nameCache[window._courierAddress] = `displayName`;
+      }
       """.}
     )
 

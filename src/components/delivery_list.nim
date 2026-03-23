@@ -29,8 +29,11 @@ proc connectedCallback(self: DeliveryList) =
     {.emit: """
     var _dlData = `deliveries`;
 
-    function _dlTruncAddr(a) {
-      if (!a || a.length <= 12) return a || '';
+    function _dlDisplayAddr(a) {
+      if (!a) return '';
+      var cached = window._nameCache && window._nameCache[a];
+      if (cached) return cached;
+      if (a.length <= 12) return a;
       return a.slice(0, 6) + '...' + a.slice(-4);
     }
 
@@ -79,8 +82,8 @@ proc connectedCallback(self: DeliveryList) =
           '<td>' + dd.deliveryId + '</td>' +
           '<td>' + dd.typeId + '</td>' +
           '<td>' + dd.quantity + '</td>' +
-          '<td>' + _dlTruncAddr(recv) + '</td>' +
-          '<td>' + (courier ? _dlTruncAddr(courier) : '\u2014') + '</td>' +
+          '<td>' + _dlDisplayAddr(recv) + '</td>' +
+          '<td>' + (courier ? _dlDisplayAddr(courier) : '\u2014') + '</td>' +
           '<td><span class="' + statusCls + '">' + statusTxt + '</span></td>' +
           '</tr>';
       }

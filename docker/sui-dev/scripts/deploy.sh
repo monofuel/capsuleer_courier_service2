@@ -82,3 +82,10 @@ echo " EXTENSION_CONFIG_ID=$EXTENSION_CONFIG_ID"
 echo " ADMIN_CAP_ID=$ADMIN_CAP_ID"
 echo " Env file: .env.deploy"
 echo "================================================"
+
+# Seed the world with test resources (characters, SSU, items).
+SCRIPT_DIR="$(dirname "$0")"
+if [ -f "$SCRIPT_DIR/seed-world.sh" ]; then
+  echo ""
+  bash "$SCRIPT_DIR/seed-world.sh"
+fi

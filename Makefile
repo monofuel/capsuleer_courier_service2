@@ -48,6 +48,7 @@ integration-build: nim.cfg
 integration-test: integration-build
 	docker compose run --rm sui-dev bash -c "\
 		/opt/sui-dev/scripts/deploy.sh && \
+		echo 'Waiting for chain to settle...' && sleep 3 && \
 		cd /workspace && \
 		for f in tests/integration_*.js; do \
 			[ -e \"\$$f\" ] || continue; \

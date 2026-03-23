@@ -25,8 +25,11 @@ proc connectedCallback(self: CourierLeaderboard) =
     let entries = await queryLeaderboard(rpcUrl, packageId)
 
     {.emit: """
-    function truncAddr(a) {
-      if (!a || a.length <= 12) return a || '';
+    function displayAddr(a) {
+      if (!a) return '';
+      var cached = window._nameCache && window._nameCache[a];
+      if (cached) return cached;
+      if (a.length <= 12) return a;
       return a.slice(0, 6) + '...' + a.slice(-4);
     }
 
@@ -50,7 +53,7 @@ proc connectedCallback(self: CourierLeaderboard) =
         var rowClass = isMe ? ' class="highlight-row"' : '';
         html += '<tr' + rowClass + '>' +
           '<td>' + (i + 1) + '</td>' +
-          '<td>' + truncAddr(addr) + (isMe ? ' (you)' : '') + '</td>' +
+          '<td>' + displayAddr(addr) + (isMe ? ' (you)' : '') + '</td>' +
           '<td>' + (dd.totalLikes || 0) + '</td>' +
           '<td>' + (dd.deliveriesCompleted || 0) + '</td>' +
           '</tr>';

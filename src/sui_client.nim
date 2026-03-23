@@ -159,6 +159,26 @@ proc readEnvFile*(path: cstring): JsObject =
 
 proc getEnv*(env: JsObject, key: cstring): cstring {.importjs: "#[#]".}
 
+# --- Object queries via JSON-RPC ---
+
+proc getObjectJson*(rpcUrl: cstring, objectId: cstring): Future[JsObject] {.async.} =
+  ## Fetch object content via sui_getObject RPC. Returns parsed JSON or null.
+  var resp: JsObject
+  {.emit: """
+  const response = await fetch(`rpcUrl`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'sui_getObject',
+      params: [`objectId`, { showContent: true }]
+    })
+  });
+  `resp` = await response.json();
+  """.}
+  result = resp
+
 # --- Event queries via JSON-RPC ---
 
 proc queryEvents*(rpcUrl: cstring, eventType: cstring, limit: int = 50): Future[JsObject] {.async.} =

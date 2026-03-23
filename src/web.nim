@@ -5,6 +5,7 @@
 import
   std/[dom, asyncjs],
   sui_client,
+  courier_client,
   components/[app_shell, wallet_connect, player_stats,
               create_delivery, courier_actions, admin_panel, delivery_list, leaderboard]
 {.pop.}
@@ -15,6 +16,13 @@ proc main() {.async.} =
   echo "Capsuleer Courier Service initialized"
 
   onConnectCallback = proc() =
+    # Cache the connected address display name.
+    if connectedAddress != nil:
+      var savedName: cstring
+      {.emit: "`savedName` = localStorage.getItem('courier_display_name') || '';".}
+      if savedName.len > 0:
+        setAddressName(connectedAddress, savedName)
+
     for selector in ["player-stats", "create-delivery", "courier-actions", "admin-panel", "delivery-list", "courier-leaderboard"]:
       let el = document.querySelector(cstring(selector))
       if not el.isNil:

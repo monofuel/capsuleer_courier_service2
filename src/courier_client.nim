@@ -8,6 +8,35 @@ import
 const
   CourierModule* = "courier_service"
 
+# --- Name cache ---
+# Maps addresses to display names. Populated from character objects or manually.
+
+proc setAddressName*(address, name: cstring) =
+  ## Cache a display name for an address.
+  {.emit: """
+  if (!window._nameCache) window._nameCache = {};
+  window._nameCache[`address`] = `name`;
+  """.}
+
+proc getAddressName*(address: cstring): cstring =
+  ## Look up a cached display name. Returns empty string if unknown.
+  var name: cstring
+  {.emit: """
+  `name` = (window._nameCache && window._nameCache[`address`]) || '';
+  """.}
+  result = name
+
+proc resolveAddressDisplay*(address: cstring): cstring =
+  ## Return display name if cached, otherwise truncated address.
+  let name = getAddressName(address)
+  if name.len > 0:
+    return name
+  if address.len <= 12:
+    return address
+  var shortened: cstring
+  {.emit: "`shortened` = `address`.slice(0, 6) + '...' + `address`.slice(-4);".}
+  result = shortened
+
 type
   DeliveryInfo* = object
     deliveryId*: int
