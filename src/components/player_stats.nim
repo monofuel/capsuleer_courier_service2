@@ -1,8 +1,9 @@
-## Player stats component — shows connected wallet info.
+## Player stats component — shows likes, deliveries completed, pending requests.
 
 import
-  std/dom,
+  std/[dom, asyncjs],
   nimponents,
+  ../[sui_client, courier_client],
   ./wallet_connect
 
 type PlayerStats* = ref object of WebComponent
@@ -12,23 +13,42 @@ var
   configId*: cstring = nil
   adminCapId*: cstring = nil
 
-proc render(self: PlayerStats) =
-  ## Render player stats panel.
+proc connectedCallback(self: PlayerStats) =
+  ## Called when element is added to DOM. Queries player stats from events.
   if connectedAddress == nil:
     self.innerHTML = "<div class=\"stats-panel\"><p>Connect wallet to view stats</p></div>"
     return
 
-  self.innerHTML = cstring(
-    "<div class=\"stats-panel\">" &
-    "<h3>Player Stats</h3>" &
-    "<div class=\"stat\"><span class=\"stat-label\">Address</span><span class=\"stat-value\">" & $connectedAddress & "</span></div>" &
-    "<p class=\"stat-note\">On-chain metrics query coming soon</p>" &
-    "</div>"
-  )
+  if packageId == nil:
+    self.innerHTML = "<div class=\"stats-panel\"><h3>Player Stats</h3><p>Set config to view stats</p></div>"
+    return
 
-proc connectedCallback(self: PlayerStats) =
-  ## Called when element is added to DOM.
-  self.render()
+  # Capture element ref for async use.
+  {.emit: "window._psEl = `self`;".}
+
+  self.innerHTML = "<div class=\"stats-panel\"><h3>Player Stats</h3><p class=\"loading-text\">Loading...</p></div>"
+
+  var rpcUrl: cstring
+  {.emit: "`rpcUrl` = localStorage.getItem('sui_rpc_url') || 'http://127.0.0.1:9000';".}
+
+  proc load() {.async.} =
+    let stats = await queryPlayerStats(rpcUrl, packageId, connectedAddress)
+
+    {.emit: """
+    var s = `stats`;
+    var addr = window._courierAddress || '';
+    var truncAddr = addr.length > 12 ? addr.slice(0, 6) + '...' + addr.slice(-4) : addr;
+    window._psEl.innerHTML =
+      '<div class="stats-panel">' +
+      '<h3>Player Stats</h3>' +
+      '<div class="stat"><span class="stat-label">Address</span><span class="stat-value">' + truncAddr + '</span></div>' +
+      '<div class="stat"><span class="stat-label">Likes Earned</span><span class="stat-value">' + (s.likes || 0) + '</span></div>' +
+      '<div class="stat"><span class="stat-label">Deliveries Completed</span><span class="stat-value">' + (s.deliveriesCompleted || 0) + '</span></div>' +
+      '<div class="stat"><span class="stat-label">Pending Requests</span><span class="stat-value">' + (s.pendingRequests || 0) + '</span></div>' +
+      '</div>';
+    """.}
+
+  runWithErrorHandler(load(), self)
 
 setupNimponent[PlayerStats]("player-stats", nil, connectedCallback)
 
@@ -36,7 +56,7 @@ proc refreshStats*() =
   ## Re-render all player-stats elements.
   let elements = document.querySelectorAll("player-stats")
   {.emit: """
-  for (let i = 0; i < `elements`.length; i++) {
+  for (var i = 0; i < `elements`.length; i++) {
     if (`elements`[i].connectedCallback) `elements`[i].connectedCallback();
   }
   """.}

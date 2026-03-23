@@ -4,7 +4,7 @@
 import
   std/dom,
   nimponents,
-  ./[wallet_connect, player_stats, create_delivery, courier_actions, admin_panel, delivery_list]
+  ./[wallet_connect, player_stats, create_delivery, courier_actions, admin_panel, delivery_list, leaderboard]
 {.pop.}
 
 type AppShell* = ref object of WebComponent
@@ -31,6 +31,7 @@ proc render(self: AppShell) =
     "<admin-panel></admin-panel>" &
     "<create-delivery></create-delivery>" &
     "<courier-actions></courier-actions>" &
+    "<courier-leaderboard></courier-leaderboard>" &
     "</div></main>"
   )
 

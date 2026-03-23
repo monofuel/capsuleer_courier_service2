@@ -137,3 +137,91 @@ proc queryDeliveries*(rpcUrl, packageId: cstring): Future[seq[DeliveryInfo]] {.a
   """.}
 
   result = deliveries
+
+type
+  LeaderboardEntry* = object
+    address*: cstring
+    totalLikes*: int
+    deliveriesCompleted*: int
+
+proc queryLeaderboard*(rpcUrl, packageId: cstring): Future[seq[LeaderboardEntry]] {.async.} =
+  ## Query DeliveryFulfilled events and aggregate likes per courier.
+  var entries: seq[LeaderboardEntry]
+
+  let fulfilledType = cstring($packageId & "::" & CourierModule & "::DeliveryFulfilled")
+  let fulfilledResp = await queryEvents(rpcUrl, fulfilledType)
+
+  {.emit: """
+  const courierMap = new Map();
+  const data = `fulfilledResp`.result && `fulfilledResp`.result.data || [];
+  for (const evt of data) {
+    const fields = evt.parsedJson;
+    if (!fields) continue;
+    const addr = fields.courier || '';
+    const likes = parseInt(fields.likes_earned) || 0;
+    if (!courierMap.has(addr)) {
+      courierMap.set(addr, { address: addr, totalLikes: 0, deliveriesCompleted: 0 });
+    }
+    const entry = courierMap.get(addr);
+    entry.totalLikes += likes;
+    entry.deliveriesCompleted += 1;
+  }
+
+  // Sort by likes descending.
+  `entries` = Array.from(courierMap.values()).sort(function(a, b) {
+    return b.totalLikes - a.totalLikes;
+  });
+  """.}
+
+  result = entries
+
+type
+  PlayerStatsInfo* = object
+    likes*: int
+    deliveriesCompleted*: int
+    pendingRequests*: int
+
+proc queryPlayerStats*(rpcUrl, packageId, playerAddress: cstring): Future[PlayerStatsInfo] {.async.} =
+  ## Compute player stats from events.
+  var stats: PlayerStatsInfo
+
+  let createdType = cstring($packageId & "::" & CourierModule & "::DeliveryCreated")
+  let fulfilledType = cstring($packageId & "::" & CourierModule & "::DeliveryFulfilled")
+  let pickedUpType = cstring($packageId & "::" & CourierModule & "::DeliveryPickedUp")
+
+  let createdResp = await queryEvents(rpcUrl, createdType)
+  let fulfilledResp = await queryEvents(rpcUrl, fulfilledType)
+  let pickedUpResp = await queryEvents(rpcUrl, pickedUpType)
+
+  {.emit: """
+  var likes = 0, completed = 0, pending = 0;
+  var addr = `playerAddress`;
+
+  // Count pending: created by me minus picked up by me.
+  var myCreated = 0, myPickedUp = 0;
+  var createdData = `createdResp`.result && `createdResp`.result.data || [];
+  for (var i = 0; i < createdData.length; i++) {
+    var f = createdData[i].parsedJson;
+    if (f && f.receiver === addr) myCreated++;
+  }
+  var pickedUpData = `pickedUpResp`.result && `pickedUpResp`.result.data || [];
+  for (var i = 0; i < pickedUpData.length; i++) {
+    var f = pickedUpData[i].parsedJson;
+    if (f && f.receiver === addr) myPickedUp++;
+  }
+  pending = myCreated - myPickedUp;
+
+  // Count likes and deliveries completed as courier.
+  var fulfilledData = `fulfilledResp`.result && `fulfilledResp`.result.data || [];
+  for (var i = 0; i < fulfilledData.length; i++) {
+    var f = fulfilledData[i].parsedJson;
+    if (f && f.courier === addr) {
+      likes += parseInt(f.likes_earned) || 0;
+      completed++;
+    }
+  }
+
+  `stats` = { likes: likes, deliveriesCompleted: completed, pendingRequests: pending };
+  """.}
+
+  result = stats

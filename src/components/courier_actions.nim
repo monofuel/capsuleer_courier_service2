@@ -4,7 +4,7 @@ import
   std/[dom, asyncjs],
   nimponents,
   ../[sui_client, courier_client],
-  ./[wallet_connect, player_stats, delivery_list]
+  ./[wallet_connect, player_stats, delivery_list, leaderboard]
 
 type CourierActions* = ref object of WebComponent
 
@@ -52,6 +52,7 @@ proc render(self: CourierActions) =
           refreshStats()
           {.emit: "await new Promise(function(r) { setTimeout(r, 1000); });".}
           refreshDeliveryList()
+          refreshLeaderboard()
         else:
           statusDiv.innerHTML = "Transaction failed"
 

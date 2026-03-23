@@ -188,11 +188,29 @@ proc queryEvents*(rpcUrl: cstring, eventType: cstring, limit: int = 50): Future[
 
 proc runWithErrorHandler*(future: Future[void], statusElement: auto) =
   ## Run an async future and display errors in a DOM element.
+  ## Maps known Move abort codes to human-readable messages.
   {.emit: """
+  var _errorMap = {
+    '13906834500761026563': 'Quantity must be between 1 and 500',
+    '13906834573775339521': 'Item type has no likes configured (run Set Likes first)',
+    '13906834638200111109': 'Max 5 pending delivery requests per player',
+    '13906834668265013255': 'Delivery does not exist',
+    '13906834735698698243': 'Delivery has already been fulfilled',
+    '13906834822884098059': 'Delivery has not been fulfilled yet',
+    '13906834891298783233': 'Only the receiver can pickup this delivery'
+  };
+
   `future`.catch(function(err) {
     console.error('Transaction error:', err);
     if (`statusElement`) {
-      `statusElement`.innerHTML = 'Error: ' + (err.message || err);
+      var msg = err.message || String(err);
+      var match = msg.match(/sub status (\d+)/);
+      if (!match) match = msg.match(/MoveAbort\([^,]+,\s*(\d+)\)/);
+      if (match && _errorMap[match[1]]) {
+        `statusElement`.innerHTML = 'Error: ' + _errorMap[match[1]];
+      } else {
+        `statusElement`.innerHTML = 'Error: ' + msg;
+      }
     }
   });
   """.}

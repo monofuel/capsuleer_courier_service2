@@ -384,6 +384,10 @@ input::placeholder {
   color: var(--success);
 }
 
+.highlight-row td {
+  background: var(--accent-20);
+}
+
 /* --- Loading Animation --- */
 
 @keyframes loading-dot-blink {
