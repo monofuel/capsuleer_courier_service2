@@ -6,7 +6,7 @@ edition = "2024"
 # Local dependency for fast iteration:
 world = { local = "../../world-contracts/contracts/world" }
 # Git dependency for CI/production:
-# world = { git = "https://github.com/evefrontier/world-contracts.git", subdir = "contracts/world", rev = "v0.0.18" }
+# world = { git = "https://github.com/evefrontier/world-contracts.git", subdir = "contracts/world", rev = "v0.0.21" }
 
 [environments]
 testnet_internal = "4c78adac"
