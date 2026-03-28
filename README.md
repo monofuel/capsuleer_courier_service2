@@ -76,15 +76,26 @@
 - [x] docker-compose with app + sui-dev services
 - [x] `make serve` builds frontend and starts server on port 8080
 
-### Phase 8: Testnet Deployment (requires manual steps)
-- [ ] obtain Sui testnet credentials and faucet tokens
-- [ ] deploy world contracts to testnet (or connect to existing EVE Frontier world)
-- [ ] publish courier service contracts to testnet
-- [ ] configure `.env` with testnet values
-- [ ] deploy frontend (initially localhost, later Walrus blob storage)
-- [ ] **MANUAL**: test in-game — link dApp URL to a Smart Storage Unit, interact via game client
+### Phase 8: Utopia Deployment
+- [ ] obtain Sui testnet tokens (faucet)
+- [ ] publish courier service contracts to Utopia (world package `0xd12a70c7...`)
+- [ ] configure `.env` with Utopia contract addresses
+- [ ] deploy frontend (localhost or Walrus)
+- [ ] test in-game on Utopia — link dApp URL to a Smart Storage Unit, use `/giveitem` to get test materials
+- [ ] verify full delivery lifecycle: create request → courier fulfill → receiver pickup
 
-### Phase 9: Polish & Stretch Goals
+### Phase 9: Stillness Deployment (bonus points)
+- [ ] publish courier service contracts to Stillness (world package `0x28b49755...`)
+- [ ] configure `.env` with Stillness contract addresses
+- [ ] deploy frontend for Stillness
+- [ ] test in-game on Stillness with real player inventory
+
+### Phase 10: Hackathon Submission
+- [ ] record demo video showing the full delivery flow
+- [ ] submit source code
+- [ ] submit demo video
+
+### Phase 11: Polish & Stretch Goals
 - [ ] Walrus blob storage for frontend hosting (replace HTTP server for static assets)
 - [ ] scriptorium integration for iterating on the project
 - [ ] courier quotes / flavor text (port from v1)
