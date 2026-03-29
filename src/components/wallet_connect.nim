@@ -45,73 +45,6 @@ proc signAndExecute*(tx: Transaction): Future[TransactionResult] {.async.} =
   else:
     {.emit: "throw new Error('No wallet connected');".}
 
-proc renderDev(self: WalletConnect) =
-  ## Dev mode: RPC URL + private key inputs.
-  if connectedAddress != nil:
-    self.innerHTML = cstring(
-      "<div class=\"wallet-connected\">" &
-      "<span class=\"wallet-address\">" & $connectedAddress & "</span>" &
-      "<button class=\"btn btn-sm\" id=\"wallet-disconnect\">Disconnect</button>" &
-      "</div>"
-    )
-    let btn = self.querySelector("#wallet-disconnect")
-    if not btn.isNil:
-      btn.addEventListener("click", proc(e: Event) =
-        connectedClient = nil
-        connectedKeypair = nil
-        connectedAddress = nil
-        {.emit: """
-        localStorage.removeItem('sui_rpc_url');
-        localStorage.removeItem('sui_private_key');
-        """.}
-        self.render()
-      )
-  else:
-    var savedRpc, savedKey: cstring
-    {.emit: """
-    `savedRpc` = localStorage.getItem('sui_rpc_url') || `config.rpcUrl`;
-    `savedKey` = localStorage.getItem('sui_private_key') || '';
-    """.}
-    self.innerHTML = cstring(
-      "<div class=\"wallet-form\">" &
-      "<div class=\"form-group\"><label>RPC URL</label>" &
-      "<input type=\"text\" id=\"rpc-url\" value=\"" & $savedRpc & "\" /></div>" &
-      "<div class=\"form-group\"><label>Private Key</label>" &
-      "<input type=\"password\" id=\"private-key\" value=\"" & $savedKey & "\" placeholder=\"suiprivkey...\" /></div>" &
-      "<button class=\"btn\" id=\"wallet-connect\">Connect</button>" &
-      "<div id=\"wallet-error\" class=\"error\"></div>" &
-      "</div>"
-    )
-    let btn = self.querySelector("#wallet-connect")
-    if not btn.isNil:
-      btn.addEventListener("click", proc(e: Event) =
-        let rpcInput = self.querySelector("#rpc-url").InputElement
-        let keyInput = self.querySelector("#private-key").InputElement
-        let errorDiv = self.querySelector("#wallet-error")
-        let rpcUrl = rpcInput.value
-        let privKey = keyInput.value
-
-        if privKey.len == 0:
-          errorDiv.innerHTML = "Private key required"
-          return
-
-        connectedClient = newSuiClient(rpcUrl)
-        connectedKeypair = newKeypairFromPrivateKey(privKey)
-        connectedAddress = connectedKeypair.getAddress()
-
-        {.emit: """
-        window._courierAddress = `connectedAddress`;""".}
-
-        {.emit: """
-        localStorage.setItem('sui_rpc_url', `rpcUrl`);
-        localStorage.setItem('sui_private_key', `privKey`);
-        """.}
-
-        self.render()
-        if onConnectCallback != nil:
-          onConnectCallback()
-      )
-
 proc renderProdConnected(self: WalletConnect) =
   ## Render connected state in production mode — just show the address.
   var shortAddr: cstring
@@ -234,33 +167,8 @@ proc renderDemo(self: WalletConnect) =
 proc render(self: WalletConnect) =
   if isDemo:
     self.renderDemo()
-  elif isProduction:
-    self.renderProd()
   else:
-    self.renderDev()
-
-proc tryAutoConnect*() =
-  ## Auto-connect from saved credentials (dev mode only).
-  if not sdkLoaded:
-    return
-  if connectedAddress != nil:
-    return
-  if isProduction:
-    return
-  var savedKey: cstring
-  {.emit: "`savedKey` = localStorage.getItem('sui_private_key') || '';".}
-  if savedKey.len > 0:
-    var savedRpc: cstring
-    {.emit: "`savedRpc` = localStorage.getItem('sui_rpc_url') || `config.rpcUrl`;".}
-    connectedClient = newSuiClient(savedRpc)
-    connectedKeypair = newKeypairFromPrivateKey(savedKey)
-    connectedAddress = connectedKeypair.getAddress()
-    {.emit: "window._courierAddress = `connectedAddress`;".}
-    let el = document.querySelector("wallet-connect")
-    if not el.isNil:
-      {.emit: "if (`el`.connectedCallback) `el`.connectedCallback();".}
-    if onConnectCallback != nil:
-      onConnectCallback()
+    self.renderProd()
 
 proc connectedCallback(self: WalletConnect) =
   ## Called when element is added to DOM.

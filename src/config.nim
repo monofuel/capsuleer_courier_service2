@@ -78,7 +78,8 @@ proc detectEnvironment*() =
     isProduction = true
     switchEnvironment("utopia")
   else:
-    switchEnvironment("devnet")
+    isProduction = true
+    switchEnvironment("stillness")
 
   # Landing page mode: production with no SSU param — public viewer.
   var hasSsu: bool

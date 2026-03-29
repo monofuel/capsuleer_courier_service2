@@ -10,54 +10,6 @@ import
 
 type AppShell* = ref object of WebComponent
 
-proc renderConfigBar(self: AppShell) =
-  ## Render the config bar — dev mode only.
-  if isProduction:
-    return
-
-  let envLabel = self.querySelector("#env-label")
-  if not envLabel.isNil:
-    envLabel.innerHTML = activeEnvironment
-
-  {.emit: """
-  var btns = `self`.querySelectorAll('.env-btn');
-  for (var i = 0; i < btns.length; i++) {
-    if (btns[i].getAttribute('data-env') === `activeEnvironment`) {
-      btns[i].classList.add('active');
-    } else {
-      btns[i].classList.remove('active');
-    }
-    btns[i].addEventListener('click', function() {
-      var env = this.getAttribute('data-env');
-      `switchEnvironment`(env);
-      `self`.render();
-      var children = `self`.querySelectorAll('player-stats, delivery-list, courier-leaderboard');
-      for (var j = 0; j < children.length; j++) {
-        if (children[j].connectedCallback) children[j].connectedCallback();
-      }
-    });
-  }
-  """.}
-
-  var savedName: cstring
-  {.emit: "`savedName` = localStorage.getItem('courier_display_name') || '';".}
-  let nameInput = self.querySelector("#display-name").InputElement
-  if not nameInput.isNil:
-    nameInput.value = savedName
-
-  let saveBtn = self.querySelector("#save-config")
-  if not saveBtn.isNil:
-    saveBtn.addEventListener("click", proc(e: Event) =
-      let displayName = self.querySelector("#display-name").InputElement.value
-      {.emit: """
-      localStorage.setItem('courier_display_name', `displayName`);
-      if (`displayName` && window._courierAddress) {
-        if (!window._nameCache) window._nameCache = {};
-        window._nameCache[window._courierAddress] = `displayName`;
-      }
-      """.}
-    )
-
 proc render(self: AppShell) =
   ## Render the app layout.
   if isLandingPage:
@@ -122,45 +74,12 @@ proc render(self: AppShell) =
       "<admin-panel></admin-panel>" &
       "</div></main>"
     )
-  else:
-    self.innerHTML = cstring(
-      "<header>" &
-      "<h1>Capsuleer Courier Service</h1>" &
-      "<wallet-connect></wallet-connect>" &
-      "</header>" &
-      "<main>" &
-      "<div class=\"config-bar\">" &
-      "<div class=\"env-selector\">" &
-      "<label>Environment</label>" &
-      "<div class=\"env-buttons\">" &
-      "<button class=\"btn btn-sm env-btn\" data-env=\"devnet\">Devnet</button>" &
-      "<button class=\"btn btn-sm env-btn\" data-env=\"utopia\">Utopia</button>" &
-      "<button class=\"btn btn-sm env-btn\" data-env=\"stillness\">Stillness</button>" &
-      "</div>" &
-      "<span class=\"env-active\" id=\"env-label\"></span>" &
-      "</div>" &
-      "<div class=\"form-group\"><label>Display Name</label>" &
-      "<input type=\"text\" id=\"display-name\" placeholder=\"Your name\" /></div>" &
-      "<button class=\"btn btn-sm\" id=\"save-config\">Save</button></div>" &
-      "<courier-quote></courier-quote>" &
-      "<div class=\"panels\">" &
-      "<create-delivery></create-delivery>" &
-      "<delivery-list></delivery-list>" &
-      "<player-stats></player-stats>" &
-      "<admin-panel></admin-panel>" &
-      "<courier-actions></courier-actions>" &
-      "<courier-leaderboard></courier-leaderboard>" &
-      "</div></main>"
-    )
-
   # Debug console is fixed-position, append once to body (not inside app shell).
   {.emit: """
   if (!document.querySelector('debug-console')) {
     document.body.appendChild(document.createElement('debug-console'));
   }
   """.}
-
-  self.renderConfigBar()
 
   # Landing page: wire up the URL builder.
   if isLandingPage:

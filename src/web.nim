@@ -29,8 +29,6 @@ proc main() {.async.} =
       if not el.isNil:
         {.emit: "if (`el`.connectedCallback) `el`.connectedCallback();".}
 
-  # Auto-connect from saved credentials now that the SDK is ready.
-  tryAutoConnect()
 
 {.emit: """
 `main`().catch(function(err) {
