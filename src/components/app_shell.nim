@@ -86,6 +86,26 @@ proc render(self: AppShell) =
       "<courier-leaderboard></courier-leaderboard>" &
       "</div></main>"
     )
+  elif isDemo:
+    # Demo mode: same as production layout but with demo indicator.
+    self.innerHTML = cstring(
+      "<header>" &
+      "<h1>Capsuleer Courier Service</h1>" &
+      "<div style=\"display:flex;align-items:center;gap:1rem\">" &
+      "<span style=\"color:var(--accent);font-family:var(--font-headline);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;border:1px solid var(--accent);padding:3px 8px\">Demo Mode</span>" &
+      "<wallet-connect></wallet-connect>" &
+      "</div>" &
+      "</header>" &
+      "<main>" &
+      "<courier-quote></courier-quote>" &
+      "<div class=\"panels\">" &
+      "<create-delivery></create-delivery>" &
+      "<delivery-list></delivery-list>" &
+      "<player-stats></player-stats>" &
+      "<courier-actions></courier-actions>" &
+      "<courier-leaderboard></courier-leaderboard>" &
+      "</div></main>"
+    )
   elif isProduction:
     self.innerHTML = cstring(
       "<header>" &

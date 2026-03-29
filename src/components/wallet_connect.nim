@@ -22,8 +22,21 @@ var
 proc render(self: WalletConnect)
 
 proc signAndExecute*(tx: Transaction): Future[TransactionResult] {.async.} =
-  ## Unified transaction signing — dispatches to keypair (dev) or EVE Vault (prod).
-  if connectedWallet != nil and connectedAccount != nil:
+  ## Unified transaction signing — dispatches to demo mock, keypair (dev), or EVE Vault (prod).
+  if isDemo:
+    var fakeResult: TransactionResult
+    {.emit: """
+    console.log('[demo] Simulating transaction...');
+    await new Promise(function(r) { setTimeout(r, 1500); });
+    window._demoDeliveryCount = (window._demoDeliveryCount || 0) + 1;
+    `fakeResult` = {
+      digest: 'Demo' + Math.random().toString(36).slice(2, 10),
+      effects: { status: { status: 'success' } }
+    };
+    console.log('[demo] Simulated transaction complete, digest:', `fakeResult`.digest);
+    """.}
+    result = fakeResult
+  elif connectedWallet != nil and connectedAccount != nil:
     let chain: cstring = if activeEnvironment == "devnet": "sui:devnet"
                          else: "sui:testnet"
     result = await walletSignAndExecute(connectedWallet, tx, connectedAccount, chain)
@@ -204,8 +217,24 @@ proc renderProd(self: WalletConnect) =
   }
   """.}
 
+proc renderDemo(self: WalletConnect) =
+  ## Demo mode: auto-connect with fake address, show "Demo Mode" badge.
+  ## Don't set connectedClient — keeps waitForTransaction guards from calling chain with fake digests.
+  if connectedAddress == nil:
+    connectedAddress = "0xd3m0...c0de"
+    {.emit: "window._courierAddress = '0xd3m0000000000000000000000000000000000000000000000000000000c0de';".}
+    if onConnectCallback != nil:
+      onConnectCallback()
+  self.innerHTML = cstring(
+    "<div class=\"wallet-connected\">" &
+    "<span style=\"color:var(--accent);font-family:var(--font-headline);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em\">Demo Mode</span>" &
+    "</div>"
+  )
+
 proc render(self: WalletConnect) =
-  if isProduction:
+  if isDemo:
+    self.renderDemo()
+  elif isProduction:
     self.renderProd()
   else:
     self.renderDev()

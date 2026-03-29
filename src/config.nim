@@ -18,6 +18,7 @@ var
   ssuId*: cstring = nil
   datahubHost*: cstring = nil
   isLandingPage*: bool = false  ## True when production mode with no SSU param — public viewer.
+  isDemo*: bool = false  ## True when ?demo=true — fake data for video recording.
 
 proc applyConfig(cfg: cstring) =
   ## Apply a config object to global variables.
@@ -56,12 +57,21 @@ proc switchEnvironment*(name: cstring) =
 proc detectEnvironment*() =
   ## Auto-detect environment from ?tenant= query parameter.
   var tenant: cstring
+  var demoParam: bool
   {.emit: """
   var params = new URLSearchParams(window.location.search);
   `tenant` = params.get('tenant') || '';
   `ssuId` = params.get('ssu') || null;
+  `demoParam` = params.get('demo') === 'true';
   """.}
-  if tenant == "stillness":
+  isDemo = demoParam
+  if isDemo:
+    # Demo mode: use stillness config with a fake SSU.
+    isProduction = true
+    switchEnvironment("stillness")
+    ssuId = "0xdemo000000000000000000000000000000000000000000000000000000000000"
+    {.emit: "console.log('[config] Demo mode enabled');".}
+  elif tenant == "stillness":
     isProduction = true
     switchEnvironment("stillness")
   elif tenant == "utopia":
@@ -76,7 +86,7 @@ proc detectEnvironment*() =
   `hasSsu` = (`ssuId` !== null && `ssuId` !== '');
   console.log('[config] URL: ' + window.location.href);
   console.log('[config] All params: ' + params.toString());
-  console.log('[config] tenant=' + `tenant` + ' ssuId=' + `ssuId` + ' hasSsu=' + `hasSsu` + ' isProduction=' + `isProduction`);
+  console.log('[config] tenant=' + `tenant` + ' ssuId=' + `ssuId` + ' hasSsu=' + `hasSsu` + ' isProduction=' + `isProduction` + ' isDemo=' + `isDemo`);
   """.}
   isLandingPage = isProduction and not hasSsu
 

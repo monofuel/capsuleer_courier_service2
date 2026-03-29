@@ -3,7 +3,8 @@
 
 import
   std/asyncjs,
-  sui_client
+  sui_client,
+  config
 
 const
   CourierModule* = "courier_service"
@@ -102,6 +103,27 @@ proc queryDeliveries*(rpcUrl, packageId: cstring): Future[seq[DeliveryInfo]] {.a
   ## Query delivery events and build current state. Excludes picked-up deliveries.
   var deliveries: seq[DeliveryInfo]
 
+  if isDemo:
+    {.emit: """
+    var demoAddr = '0xd3m0000000000000000000000000000000000000000000000000000000c0de';
+    var extra = window._demoDeliveryCount || 0;
+    `deliveries` = [
+      { deliveryId: 1, storageUnitId: '', typeId: 77800, quantity: 50, receiver: demoAddr, courier: '', delivered: false, pickedUp: false },
+      { deliveryId: 2, storageUnitId: '', typeId: 77518, quantity: 25, receiver: '0xa1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f60001', courier: demoAddr, delivered: true, pickedUp: false },
+      { deliveryId: 3, storageUnitId: '', typeId: 77811, quantity: 100, receiver: '0xf6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a10002', courier: '', delivered: false, pickedUp: false },
+      { deliveryId: 4, storageUnitId: '', typeId: 77516, quantity: 10, receiver: demoAddr, courier: '0x9988776655443322119988776655443322119988776655443322119988770003', delivered: true, pickedUp: false },
+      { deliveryId: 5, storageUnitId: '', typeId: 77523, quantity: 200, receiver: '0x1122334455667788991122334455667788991122334455667788991122330004', courier: '', delivered: false, pickedUp: false },
+    ];
+    // Add dynamically created demo deliveries.
+    for (var i = 0; i < extra; i++) {
+      `deliveries`.push({
+        deliveryId: 6 + i, storageUnitId: '', typeId: 77800, quantity: 10 + i,
+        receiver: demoAddr, courier: '', delivered: false, pickedUp: false
+      });
+    }
+    """.}
+    return deliveries
+
   let createdType = cstring($packageId & "::" & CourierModule & "::DeliveryCreated")
   let fulfilledType = cstring($packageId & "::" & CourierModule & "::DeliveryFulfilled")
   let pickedUpType = cstring($packageId & "::" & CourierModule & "::DeliveryPickedUp")
@@ -177,6 +199,19 @@ proc queryLeaderboard*(rpcUrl, packageId: cstring): Future[seq[LeaderboardEntry]
   ## Query DeliveryFulfilled events and aggregate likes per courier.
   var entries: seq[LeaderboardEntry]
 
+  if isDemo:
+    {.emit: """
+    var demoAddr = '0xd3m0000000000000000000000000000000000000000000000000000000c0de';
+    `entries` = [
+      { address: '0xa1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f60001', totalLikes: 47, deliveriesCompleted: 12 },
+      { address: demoAddr, totalLikes: 31, deliveriesCompleted: 8 },
+      { address: '0xf6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a10002', totalLikes: 19, deliveriesCompleted: 5 },
+      { address: '0x9988776655443322119988776655443322119988776655443322119988770003', totalLikes: 8, deliveriesCompleted: 3 },
+      { address: '0x1122334455667788991122334455667788991122334455667788991122330004', totalLikes: 3, deliveriesCompleted: 1 },
+    ];
+    """.}
+    return entries
+
   let fulfilledType = cstring($packageId & "::" & CourierModule & "::DeliveryFulfilled")
   let fulfilledResp = await queryEvents(rpcUrl, fulfilledType)
 
@@ -213,6 +248,13 @@ type
 proc queryPlayerStats*(rpcUrl, packageId, playerAddress: cstring): Future[PlayerStatsInfo] {.async.} =
   ## Compute player stats from events.
   var stats: PlayerStatsInfo
+
+  if isDemo:
+    {.emit: """
+    var extra = window._demoDeliveryCount || 0;
+    `stats` = { likes: 31, deliveriesCompleted: 8, pendingRequests: 2 + extra };
+    """.}
+    return stats
 
   let createdType = cstring($packageId & "::" & CourierModule & "::DeliveryCreated")
   let fulfilledType = cstring($packageId & "::" & CourierModule & "::DeliveryFulfilled")
