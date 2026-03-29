@@ -68,7 +68,7 @@
 - [x] components: wallet_connect, player_stats, create_delivery, courier_actions, admin_panel, app_shell
 - [x] EVE-themed dark CSS
 - [x] `make frontend-build` / `make frontend-dev` / `make serve` targets
-- [ ] EVE Vault wallet adapter integration (stretch — currently dev-mode with private key input)
+- [x] EVE Vault wallet adapter integration via Sui Wallet Standard
 - [ ] on-chain query for player metrics (stretch — devInspect not yet working in browser)
 
 ### Phase 6: Static File Serving ✅
@@ -76,19 +76,14 @@
 - [x] docker-compose with app + sui-dev services
 - [x] `make serve` builds frontend and starts server on port 8080
 
-### Phase 8: Utopia Deployment
-- [ ] obtain Sui testnet tokens (faucet)
-- [ ] publish courier service contracts to Utopia (world package `0xd12a70c7...`)
-- [ ] configure `.env` with Utopia contract addresses
-- [ ] deploy frontend (localhost or Walrus)
-- [ ] test in-game on Utopia — link dApp URL to a Smart Storage Unit, use `/giveitem` to get test materials
-- [ ] verify full delivery lifecycle: create request → courier fulfill → receiver pickup
-
-### Phase 9: Stillness Deployment (bonus points)
-- [ ] publish courier service contracts to Stillness (world package `0x28b49755...`)
-- [ ] configure `.env` with Stillness contract addresses
-- [ ] deploy frontend for Stillness
-- [ ] test in-game on Stillness with real player inventory
+### Phase 9: Stillness Deployment ✅
+- [x] publish courier service contracts to Stillness (world package `0x28b49755...`)
+- [x] multi-environment config (devnet/utopia/stillness) with auto-detection via `?tenant=` URL param
+- [x] EVE Vault wallet integration via Sui Wallet Standard (auto-connects in-game)
+- [x] production UI: streamlined layout, no dev controls
+- [x] `?ssu=` URL param for storage unit ID auto-fill
+- [x] landing page mode for public viewers (no SSU param) with URL builder
+- [x] test in-game on Stillness with real player inventory
 
 ### Phase 10: Hackathon Submission
 - [ ] record demo video showing the full delivery flow
@@ -96,10 +91,18 @@
 - [ ] submit demo video
 
 ### Phase 11: Polish & Stretch Goals
+- [x] courier quotes / flavor text with day/time easter eggs
+- [x] searchable item type dropdown (fetches all 392 types from datahub API)
+- [x] item names in delivery table
+- [x] quake-style debug console (backtick to toggle, JS eval, early log buffering)
+- [x] admin panel visible only to admin address in production
+- [x] auto-configure 1 like for unknown item types (no more setup required per item)
+- [ ] postbox onboarding: guide for any player to set up their own courier postbox
+  - [ ] document how to configure a Smart Storage Unit with the dApp link
+  - [ ] landing page URL builder generates the correct `?tenant=&ssu=` link
+  - [ ] explain the flow: deploy SSU → copy dApp link → paste into SSU config → share with couriers
 - [ ] Walrus blob storage for frontend hosting (replace HTTP server for static assets)
 - [ ] scriptorium integration for iterating on the project
-- [ ] courier quotes / flavor text (port from v1)
-- [ ] improved item type display (names, images from gateway)
 - [ ] fee system for deliveries (v1 had none, noted as future feature)
 
 ### Notes
