@@ -8,7 +8,7 @@ import
   courier_client,
   config,
   components/[app_shell, wallet_connect, player_stats,
-              create_delivery, courier_actions, admin_panel, delivery_list, leaderboard]
+              create_delivery, admin_panel, delivery_list, leaderboard]
 {.pop.}
 
 proc main() {.async.} =

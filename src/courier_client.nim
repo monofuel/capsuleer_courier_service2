@@ -107,19 +107,31 @@ proc queryDeliveries*(rpcUrl, packageId: cstring): Future[seq[DeliveryInfo]] {.a
     {.emit: """
     var demoAddr = '0xd3m0000000000000000000000000000000000000000000000000000000c0de';
     var extra = window._demoDeliveryCount || 0;
-    `deliveries` = [
+    if (!window._demoFulfilled) window._demoFulfilled = {};
+    if (!window._demoPickedUp) window._demoPickedUp = {};
+    var all = [
       { deliveryId: 1, storageUnitId: '', typeId: 77800, quantity: 50, receiver: demoAddr, courier: '', delivered: false, pickedUp: false },
       { deliveryId: 2, storageUnitId: '', typeId: 77518, quantity: 25, receiver: '0xa1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f60001', courier: demoAddr, delivered: true, pickedUp: false },
       { deliveryId: 3, storageUnitId: '', typeId: 77811, quantity: 100, receiver: '0xf6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a10002', courier: '', delivered: false, pickedUp: false },
       { deliveryId: 4, storageUnitId: '', typeId: 77516, quantity: 10, receiver: demoAddr, courier: '0x9988776655443322119988776655443322119988776655443322119988770003', delivered: true, pickedUp: false },
       { deliveryId: 5, storageUnitId: '', typeId: 77523, quantity: 200, receiver: '0x1122334455667788991122334455667788991122334455667788991122330004', courier: '', delivered: false, pickedUp: false },
     ];
-    // Add dynamically created demo deliveries.
     for (var i = 0; i < extra; i++) {
-      `deliveries`.push({
+      all.push({
         deliveryId: 6 + i, storageUnitId: '', typeId: 77800, quantity: 10 + i,
         receiver: demoAddr, courier: '', delivered: false, pickedUp: false
       });
+    }
+    // Apply demo mutations.
+    `deliveries` = [];
+    for (var i = 0; i < all.length; i++) {
+      var d = all[i];
+      if (window._demoPickedUp[d.deliveryId]) continue;
+      if (window._demoFulfilled[d.deliveryId]) {
+        d.delivered = true;
+        d.courier = demoAddr;
+      }
+      `deliveries`.push(d);
     }
     """.}
     return deliveries

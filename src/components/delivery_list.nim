@@ -1,11 +1,12 @@
-## Delivery list component — queries events and shows active deliveries in a table.
+## Delivery list component — queries events and shows deliveries in prioritized sections
+## with inline action buttons (Pickup / Deliver).
 
 {.push warning[UnusedImport]: off.}
 import
   std/[dom, asyncjs],
   nimponents,
   ../[sui_client, courier_client, config],
-  ./wallet_connect
+  ./[wallet_connect, player_stats, leaderboard]
 {.pop.}
 
 type DeliveryList* = ref object of WebComponent
@@ -16,21 +17,22 @@ proc connectedCallback(self: DeliveryList) =
     self.innerHTML = "<div class=\"panel\"><p>Set config to view deliveries</p></div>"
     return
 
-  self.innerHTML = "<div class=\"panel\"><h3>Deliveries</h3><p class=\"loading-text\">Loading...</p></div>"
+  self.innerHTML = "<div class=\"panel\"><h3>Deliveries</h3><p class=\"loading-text\">Loading<span class=\"loading-dots\"><span>.</span><span>.</span><span>.</span></span></p></div>"
 
-  # Capture element reference into a global JS var.
-  # Nim hoists async procs to top level, so closures don't work.
-  {.emit: "window.window._dlEl = `self`;".}
+  {.emit: "window._dlEl = `self`;".}
 
   let rpcUrl = config.rpcUrl
+  let cfgId = configId
+  let pkgId = packageId
 
   proc load() {.async.} =
-    let deliveries = await queryDeliveries(rpcUrl, packageId)
+    let deliveries = await queryDeliveries(rpcUrl, pkgId)
 
     {.emit: """
     var _dlData = `deliveries`;
+    var connAddr = window._courierAddress || '';
 
-    function _dlDisplayAddr(a) {
+    function _dlAddr(a) {
       if (!a) return '';
       var cached = window._nameCache && window._nameCache[a];
       if (cached) return cached;
@@ -38,90 +40,145 @@ proc connectedCallback(self: DeliveryList) =
       return a.slice(0, 6) + '...' + a.slice(-4);
     }
 
-    function _dlRenderTable(tab) {
-      var connAddr = window._courierAddress || '';
-      var html = '<div class="panel">' +
-        '<div class="panel-header">' +
-        '<h3>Deliveries</h3>' +
-        '<div class="tab-bar">';
-
-      var tabs = ['all', 'my-requests', 'available'];
-      for (var ti = 0; ti < tabs.length; ti++) {
-        var t = tabs[ti];
-        var label = t === 'all' ? 'All' : t === 'my-requests' ? 'My Requests' : 'Available';
-        var cls = t === tab ? ' active' : '';
-        html += '<button class="tab' + cls + '" data-tab="' + t + '">' + label + '</button>';
-      }
-
-      html += '</div>' +
-        '<button class="btn btn-sm" id="refresh-deliveries">Refresh</button>' +
-        '</div>' +
-        '<table class="delivery-table"><thead><tr>' +
-        '<th>ID</th><th>Type</th><th>Qty</th><th>Receiver</th><th>Courier</th><th>Status</th>' +
-        '</tr></thead><tbody>';
-
-      var count = 0;
-      for (var di = 0; di < _dlData.length; di++) {
-        var d = _dlData[di];
-        var dd = d.Field1 || d;
-        var recv = dd.receiver || '';
-        var delivered = !!dd.delivered;
-
-        var show = false;
-        if (tab === 'all') show = true;
-        else if (tab === 'my-requests') show = (recv === connAddr);
-        else if (tab === 'available') show = (!delivered && recv !== connAddr);
-
-        if (!show) continue;
-        count++;
-
-        var courier = dd.courier || '';
-        var statusCls = delivered ? 'status-delivered' : 'status-pending';
-        var statusTxt = delivered ? 'Awaiting Pickup' : 'Pending';
-
-        var typeName = dd.typeId;
-        if (window._itemTypes) {
-          for (var ti = 0; ti < window._itemTypes.length; ti++) {
-            if (window._itemTypes[ti].id == dd.typeId) { typeName = window._itemTypes[ti].name; break; }
-          }
+    function _dlTypeName(typeId) {
+      if (window._itemTypes) {
+        for (var i = 0; i < window._itemTypes.length; i++) {
+          if (window._itemTypes[i].id == typeId) return window._itemTypes[i].name;
         }
-
-        html += '<tr>' +
-          '<td>' + dd.deliveryId + '</td>' +
-          '<td>' + typeName + '</td>' +
-          '<td>' + dd.quantity + '</td>' +
-          '<td>' + _dlDisplayAddr(recv) + '</td>' +
-          '<td>' + (courier ? _dlDisplayAddr(courier) : '\u2014') + '</td>' +
-          '<td><span class="' + statusCls + '">' + statusTxt + '</span></td>' +
-          '</tr>';
       }
-
-      if (count === 0) {
-        html += '<tr><td colspan="6" class="empty-row">No deliveries found</td></tr>';
-      }
-
-      html += '</tbody></table></div>';
-      window._dlEl.innerHTML = html;
-
-      var tabBtns = window._dlEl.querySelectorAll('.tab');
-      for (var bi = 0; bi < tabBtns.length; bi++) {
-        tabBtns[bi].addEventListener('click', function() {
-          var newTab = this.getAttribute('data-tab');
-          localStorage.setItem('delivery_tab', newTab);
-          _dlRenderTable(newTab);
-        });
-      }
-
-      var refreshBtn = window._dlEl.querySelector('#refresh-deliveries');
-      if (refreshBtn) {
-        refreshBtn.addEventListener('click', function() {
-          if (window._dlEl.connectedCallback) window._dlEl.connectedCallback();
-        });
-      }
+      return typeId;
     }
 
-    var tab = localStorage.getItem('delivery_tab') || 'all';
-    _dlRenderTable(tab);
+    // Split deliveries into 3 buckets.
+    var pickup = [], pending = [], available = [];
+    for (var i = 0; i < _dlData.length; i++) {
+      var d = _dlData[i].Field1 || _dlData[i];
+      var recv = d.receiver || '';
+      var isMe = (recv === connAddr);
+      if (d.delivered && isMe) pickup.push(d);
+      else if (!d.delivered && isMe) pending.push(d);
+      else if (!d.delivered && !isMe) available.push(d);
+    }
+
+    var html = '';
+
+    // --- Section 1: Ready for Pickup ---
+    html += '<div class="panel"><div class="panel-header"><h3>Ready for Pickup</h3>' +
+      '<button class="btn btn-sm" id="refresh-deliveries">Refresh</button></div>';
+    if (pickup.length === 0) {
+      html += '<p class="empty-row">No deliveries awaiting pickup</p>';
+    } else {
+      html += '<table class="delivery-table"><thead><tr>' +
+        '<th>ID</th><th>Type</th><th>Qty</th><th>Courier</th><th></th>' +
+        '</tr></thead><tbody>';
+      for (var i = 0; i < pickup.length; i++) {
+        var d = pickup[i];
+        html += '<tr><td>' + d.deliveryId + '</td>' +
+          '<td>' + _dlTypeName(d.typeId) + '</td>' +
+          '<td>' + d.quantity + '</td>' +
+          '<td>' + _dlAddr(d.courier) + '</td>' +
+          '<td><button class="btn btn-sm" data-action="pickup" data-id="' + d.deliveryId + '">Pick up</button></td></tr>';
+      }
+      html += '</tbody></table>';
+    }
+    html += '</div>';
+
+    // --- Section 2: Your Pending Orders ---
+    html += '<div class="panel"><h3>Your Pending Orders</h3>';
+    if (pending.length === 0) {
+      html += '<p class="empty-row">No pending orders</p>';
+    } else {
+      html += '<table class="delivery-table"><thead><tr>' +
+        '<th>ID</th><th>Type</th><th>Qty</th><th>Status</th>' +
+        '</tr></thead><tbody>';
+      for (var i = 0; i < pending.length; i++) {
+        var d = pending[i];
+        html += '<tr><td>' + d.deliveryId + '</td>' +
+          '<td>' + _dlTypeName(d.typeId) + '</td>' +
+          '<td>' + d.quantity + '</td>' +
+          '<td><span class="status-pending">Pending</span></td></tr>';
+      }
+      html += '</tbody></table>';
+    }
+    html += '</div>';
+
+    // --- Section 3: Available Deliveries ---
+    html += '<div class="panel"><h3>Available Deliveries</h3>';
+    if (available.length === 0) {
+      html += '<p class="empty-row">No deliveries available</p>';
+    } else {
+      html += '<table class="delivery-table"><thead><tr>' +
+        '<th>ID</th><th>Type</th><th>Qty</th><th>Receiver</th><th></th>' +
+        '</tr></thead><tbody>';
+      for (var i = 0; i < available.length; i++) {
+        var d = available[i];
+        html += '<tr><td>' + d.deliveryId + '</td>' +
+          '<td>' + _dlTypeName(d.typeId) + '</td>' +
+          '<td>' + d.quantity + '</td>' +
+          '<td>' + _dlAddr(d.receiver) + '</td>' +
+          '<td><button class="btn btn-sm" data-action="deliver" data-id="' + d.deliveryId + '">Deliver</button></td></tr>';
+      }
+      html += '</tbody></table>';
+    }
+    html += '</div>';
+
+    window._dlEl.innerHTML = html;
+
+    // Wire up refresh button.
+    var refreshBtn = window._dlEl.querySelector('#refresh-deliveries');
+    if (refreshBtn) {
+      refreshBtn.addEventListener('click', function() {
+        if (window._dlEl.connectedCallback) window._dlEl.connectedCallback();
+      });
+    }
+
+    // Wire up action buttons via event delegation.
+    window._dlEl.addEventListener('click', function(ev) {
+      var btn = ev.target.closest('[data-action]');
+      if (!btn) return;
+      var action = btn.getAttribute('data-action');
+      var deliveryId = btn.getAttribute('data-id');
+      btn.disabled = true;
+      btn.textContent = 'Submitting...';
+
+      var tx;
+      if (action === 'pickup') {
+        tx = `buildPickup`(`cfgId`, `pkgId`, deliveryId);
+      } else {
+        tx = `buildFulfillDelivery`(`cfgId`, `pkgId`, deliveryId);
+      }
+
+      `signAndExecute`(tx).then(function(result) {
+        if (`isSuccess`(result)) {
+          btn.textContent = 'Done!';
+          btn.style.background = 'var(--success)';
+          // Track demo state mutations.
+          if (`isDemo`) {
+            if (!window._demoFulfilled) window._demoFulfilled = {};
+            if (!window._demoPickedUp) window._demoPickedUp = {};
+            if (action === 'pickup') window._demoPickedUp[deliveryId] = true;
+            else window._demoFulfilled[deliveryId] = true;
+          }
+          `refreshStats`();
+          setTimeout(function() {
+            `refreshDeliveryList`();
+            `refreshLeaderboard`();
+          }, 1000);
+        } else {
+          btn.textContent = 'Failed';
+          btn.style.background = 'var(--error)';
+        }
+      }).catch(function(err) {
+        console.error('Action error:', err);
+        btn.textContent = 'Error';
+        btn.style.background = 'var(--error)';
+        btn.disabled = false;
+        setTimeout(function() {
+          btn.textContent = action === 'pickup' ? 'Pick up' : 'Deliver';
+          btn.style.background = '';
+        }, 3000);
+      });
+    });
     """.}
 
   runWithErrorHandler(load(), self)
