@@ -2,10 +2,12 @@
 ## Text inputs for RPC URL + private key, stored in localStorage.
 ## For production, this would be replaced with EVE Vault wallet adapter.
 
+{.push warning[UnusedImport]: off.}
 import
   std/dom,
   nimponents,
   ../[sui_client, config]
+{.pop.}
 
 type WalletConnect* = ref object of WebComponent
 

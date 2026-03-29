@@ -2,8 +2,6 @@
 ## All configs are baked in at compile time via staticRead.
 ## Auto-detects environment from ?tenant= URL query parameter.
 
-import std/[jsffi, dom]
-
 const
   DevnetJson = staticRead("../config/devnet.json")
   UtopiaJson = staticRead("../config/utopia.json")
@@ -17,16 +15,16 @@ var
   worldPackageId*: cstring = nil
   activeEnvironment*: cstring = "devnet"
 
-proc applyConfig(json: cstring) =
-  ## Parse a JSON config string and set the global variables.
+proc applyConfig(cfg: cstring) =
+  ## Apply a config object to global variables.
+  ## The cfg parameter is actually a JS object (staticRead JSON emits as object literal).
   {.emit: """
-  var cfg = JSON.parse(`json`);
-  `packageId` = cfg.packageId || null;
-  `configId` = cfg.configId || null;
-  `adminCapId` = cfg.adminCapId || null;
-  `rpcUrl` = cfg.rpcUrl || null;
-  `worldPackageId` = cfg.worldPackageId || null;
-  `activeEnvironment` = cfg.environment || 'devnet';
+  `packageId` = `cfg`.packageId || null;
+  `configId` = `cfg`.configId || null;
+  `adminCapId` = `cfg`.adminCapId || null;
+  `rpcUrl` = `cfg`.rpcUrl || null;
+  `worldPackageId` = `cfg`.worldPackageId || null;
+  `activeEnvironment` = `cfg`.environment || 'devnet';
   """.}
 
 proc switchEnvironment*(name: cstring) =
@@ -37,11 +35,11 @@ proc switchEnvironment*(name: cstring) =
     'utopia': `UtopiaJson`,
     'stillness': `StillnessJson`
   };
-  var json = configs[`name`] || configs['devnet'];
+  var cfg = configs[`name`] || configs['devnet'];
   """.}
-  var json: cstring
-  {.emit: "`json` = json;".}
-  applyConfig(json)
+  var cfg: cstring
+  {.emit: "`cfg` = cfg;".}
+  applyConfig(cfg)
   # Update localStorage so wallet_connect and query functions pick up the RPC URL.
   {.emit: """
   if (`rpcUrl`) localStorage.setItem('sui_rpc_url', `rpcUrl`);

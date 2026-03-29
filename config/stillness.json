@@ -2,7 +2,7 @@
   "environment": "stillness",
   "rpcUrl": "https://fullnode.testnet.sui.io:443",
   "worldPackageId": "0x28b497559d65ab320d9da4613bf2498d5946b2c0ae3597ccfda3072ce127448c",
-  "packageId": "",
-  "configId": "",
-  "adminCapId": ""
+  "packageId": "0xb752caec070599390f736ba8723364614965eb69625d13dc0c4ff73044cd1304",
+  "configId": "0x004840e39e68bd14a645345a84b55141226a9a2c122daf55497d26c3d84f2221",
+  "adminCapId": "0x38441b5641d94da3f6f25550709e3655e5d0dc79509d44c66717cb161a1f8985"
 }
