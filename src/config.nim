@@ -16,6 +16,8 @@ var
   activeEnvironment*: cstring = "devnet"
   isProduction*: bool = false
   ssuId*: cstring = nil
+  datahubHost*: cstring = nil
+  isLandingPage*: bool = false  ## True when production mode with no SSU param — public viewer.
 
 proc applyConfig(cfg: cstring) =
   ## Apply a config object to global variables.
@@ -27,6 +29,10 @@ proc applyConfig(cfg: cstring) =
   `rpcUrl` = `cfg`.rpcUrl || null;
   `worldPackageId` = `cfg`.worldPackageId || null;
   `activeEnvironment` = `cfg`.environment || 'devnet';
+  var env = `activeEnvironment`;
+  if (env === 'stillness') `datahubHost` = 'https://world-api-stillness.live.tech.evefrontier.com';
+  else if (env === 'utopia') `datahubHost` = 'https://world-api-utopia.uat.pub.evefrontier.com';
+  else `datahubHost` = null;
   """.}
 
 proc switchEnvironment*(name: cstring) =
@@ -63,6 +69,16 @@ proc detectEnvironment*() =
     switchEnvironment("utopia")
   else:
     switchEnvironment("devnet")
+
+  # Landing page mode: production with no SSU param — public viewer.
+  var hasSsu: bool
+  {.emit: """
+  `hasSsu` = (`ssuId` !== null && `ssuId` !== '');
+  console.log('[config] URL: ' + window.location.href);
+  console.log('[config] All params: ' + params.toString());
+  console.log('[config] tenant=' + `tenant` + ' ssuId=' + `ssuId` + ' hasSsu=' + `hasSsu` + ' isProduction=' + `isProduction`);
+  """.}
+  isLandingPage = isProduction and not hasSsu
 
 # Auto-detect on module load.
 detectEnvironment()

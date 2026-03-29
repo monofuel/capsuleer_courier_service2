@@ -1,17 +1,19 @@
 ## Delivery list component — queries events and shows active deliveries in a table.
 
+{.push warning[UnusedImport]: off.}
 import
   std/[dom, asyncjs],
   nimponents,
   ../[sui_client, courier_client, config],
   ./wallet_connect
+{.pop.}
 
 type DeliveryList* = ref object of WebComponent
 
 proc connectedCallback(self: DeliveryList) =
   ## Called when element is added to DOM. Loads deliveries from chain events.
-  if connectedAddress == nil or packageId == nil:
-    self.innerHTML = "<div class=\"panel\"><p>Connect wallet and set config to view deliveries</p></div>"
+  if packageId == nil:
+    self.innerHTML = "<div class=\"panel\"><p>Set config to view deliveries</p></div>"
     return
 
   self.innerHTML = "<div class=\"panel\"><h3>Deliveries</h3><p class=\"loading-text\">Loading...</p></div>"
@@ -77,9 +79,16 @@ proc connectedCallback(self: DeliveryList) =
         var statusCls = delivered ? 'status-delivered' : 'status-pending';
         var statusTxt = delivered ? 'Awaiting Pickup' : 'Pending';
 
+        var typeName = dd.typeId;
+        if (window._itemTypes) {
+          for (var ti = 0; ti < window._itemTypes.length; ti++) {
+            if (window._itemTypes[ti].id == dd.typeId) { typeName = window._itemTypes[ti].name; break; }
+          }
+        }
+
         html += '<tr>' +
           '<td>' + dd.deliveryId + '</td>' +
-          '<td>' + dd.typeId + '</td>' +
+          '<td>' + typeName + '</td>' +
           '<td>' + dd.quantity + '</td>' +
           '<td>' + _dlDisplayAddr(recv) + '</td>' +
           '<td>' + (courier ? _dlDisplayAddr(courier) : '\u2014') + '</td>' +

@@ -136,11 +136,21 @@ proc moveCall*(tx: Transaction, target: cstring, arguments: openArray[Transactio
 proc digest*(txResult: TransactionResult): cstring {.importjs: "#.digest".}
 
 proc isSuccess*(txResult: TransactionResult): bool =
-  var status: cstring
+  var success: bool
   {.emit: """
-  `status` = `txResult`.effects && `txResult`.effects.status ? `txResult`.effects.status.status : "unknown";
+  // Wallet standard returns { digest, effects (bcs string), ... }
+  // RPC client returns { digest, effects: { status: { status: "success" } } }
+  // If we have a digest and no error was thrown, consider it success.
+  if (`txResult`.effects && typeof `txResult`.effects === 'object' && `txResult`.effects.status) {
+    `success` = `txResult`.effects.status.status === 'success';
+  } else if (`txResult`.digest) {
+    // Wallet standard: has digest = transaction was accepted.
+    `success` = true;
+  } else {
+    `success` = false;
+  }
   """.}
-  result = status == "success"
+  result = success
 
 # --- Env file parsing ---
 

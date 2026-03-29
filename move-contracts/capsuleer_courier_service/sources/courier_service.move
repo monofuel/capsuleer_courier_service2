@@ -15,9 +15,6 @@ use capsuleer_courier_service::config::{ExtensionConfig, AdminCap};
 const EInvalidQuantity: vector<u8> = b"Quantity must be between 1 and 500";
 
 #[error]
-const EItemNotConfigured: vector<u8> = b"Item type has no likes configured";
-
-#[error]
 const ETooManyPending: vector<u8> = b"Max 5 pending delivery requests per player";
 
 #[error]
@@ -92,11 +89,10 @@ public fun create_delivery_request(
     // Validate quantity
     assert!(quantity >= 1 && quantity <= 500, EInvalidQuantity);
 
-    // Validate item type has likes configured
-    assert!(
-        df::exists_(config.uid(), ItemLikesKey { type_id }),
-        EItemNotConfigured,
-    );
+    // Auto-configure 1 like for new item types.
+    if (!df::exists_(config.uid(), ItemLikesKey { type_id })) {
+        df::add(config.uid_mut(), ItemLikesKey { type_id }, ItemLikes { likes: 1 });
+    };
 
     // Check pending count
     let receiver = ctx.sender();

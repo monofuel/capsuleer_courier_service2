@@ -89,15 +89,18 @@ fun test_create_delivery_bad_quantity_over_500() {
     scenario.end();
 }
 
-#[test, expected_failure(abort_code = courier_service::EItemNotConfigured)]
-fun test_create_delivery_no_likes() {
+#[test]
+fun test_create_delivery_no_likes_defaults_to_one() {
     let mut scenario = test_scenario::begin(ADMIN);
     let (mut config, admin_cap) = config::create_for_testing(scenario.ctx());
 
     scenario.next_tx(RECEIVER);
     let ssu_id = object::id_from_address(@0x1234);
-    // Item type 99999 has no likes configured
+    // Item type 99999 has no likes configured — should auto-configure with 1 like.
     courier_service::create_delivery_request(&mut config, ssu_id, 99999, 10, scenario.ctx());
+
+    // Verify it was auto-configured with 1 like.
+    assert!(courier_service::get_item_likes(&config, 99999) == 1);
 
     config::destroy_for_testing(config, admin_cap);
     scenario.end();

@@ -8,11 +8,21 @@ import
 
 type AdminPanel* = ref object of WebComponent
 
+const AdminAddress = "0xafb51cd5dad394a2ad45397eb14545cf2fd52c8e314485233761cee0b35d1d24"
+
 proc render(self: AdminPanel) =
-  ## Render the admin panel.
+  ## Render the admin panel — only visible to the admin address (or dev mode).
   if connectedAddress == nil:
-    self.innerHTML = "<div class=\"panel\"><p>Connect wallet for admin actions</p></div>"
+    self.innerHTML = ""
     return
+
+  # In production, only show for the admin.
+  if isProduction:
+    var isAdmin: bool
+    {.emit: "`isAdmin` = (`connectedAddress` === `AdminAddress`);".}
+    if not isAdmin:
+      self.innerHTML = ""
+      return
 
   self.innerHTML = cstring(
     "<div class=\"panel\">" &
