@@ -3,8 +3,8 @@
 import
   std/[dom, asyncjs],
   nimponents,
-  ../[sui_client, courier_client],
-  ./[wallet_connect, player_stats]
+  ../[sui_client, courier_client, config],
+  ./wallet_connect
 
 type DeliveryList* = ref object of WebComponent
 
@@ -20,8 +20,7 @@ proc connectedCallback(self: DeliveryList) =
   # Nim hoists async procs to top level, so closures don't work.
   {.emit: "window.window._dlEl = `self`;".}
 
-  var rpcUrl: cstring
-  {.emit: "`rpcUrl` = localStorage.getItem('sui_rpc_url') || 'http://127.0.0.1:9000';".}
+  let rpcUrl = config.rpcUrl
 
   proc load() {.async.} =
     let deliveries = await queryDeliveries(rpcUrl, packageId)

@@ -3,15 +3,10 @@
 import
   std/[dom, asyncjs],
   nimponents,
-  ../[sui_client, courier_client],
+  ../[sui_client, courier_client, config],
   ./wallet_connect
 
 type PlayerStats* = ref object of WebComponent
-
-var
-  packageId*: cstring = nil
-  configId*: cstring = nil
-  adminCapId*: cstring = nil
 
 proc connectedCallback(self: PlayerStats) =
   ## Called when element is added to DOM. Queries player stats from events.
@@ -28,8 +23,7 @@ proc connectedCallback(self: PlayerStats) =
 
   self.innerHTML = "<div class=\"stats-panel\"><h3>Player Stats</h3><p class=\"loading-text\">Loading...</p></div>"
 
-  var rpcUrl: cstring
-  {.emit: "`rpcUrl` = localStorage.getItem('sui_rpc_url') || 'http://127.0.0.1:9000';".}
+  let rpcUrl = config.rpcUrl
 
   proc load() {.async.} =
     let stats = await queryPlayerStats(rpcUrl, packageId, connectedAddress)

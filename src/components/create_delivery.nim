@@ -3,7 +3,7 @@
 import
   std/[dom, asyncjs],
   nimponents,
-  ../[sui_client, courier_client],
+  ../[sui_client, courier_client, config],
   ./[wallet_connect, player_stats, delivery_list]
 
 type CreateDelivery* = ref object of WebComponent

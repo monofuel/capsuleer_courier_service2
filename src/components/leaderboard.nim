@@ -3,8 +3,7 @@
 import
   std/[dom, asyncjs],
   nimponents,
-  ../[sui_client, courier_client],
-  ./player_stats
+  ../[sui_client, courier_client, config]
 
 type CourierLeaderboard* = ref object of WebComponent
 
@@ -18,8 +17,7 @@ proc connectedCallback(self: CourierLeaderboard) =
 
   self.innerHTML = "<div class=\"panel\"><h3>Courier Leaderboard</h3><p class=\"loading-text\">Loading...</p></div>"
 
-  var rpcUrl: cstring
-  {.emit: "`rpcUrl` = localStorage.getItem('sui_rpc_url') || 'http://127.0.0.1:9000';".}
+  let rpcUrl = config.rpcUrl
 
   proc load() {.async.} =
     let entries = await queryLeaderboard(rpcUrl, packageId)

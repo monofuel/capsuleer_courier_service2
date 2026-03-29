@@ -1,4 +1,4 @@
-.PHONY: test integration-test e2e-test build docker-build docker-build-push serve move-build move-test deploy-local dev npm-install integration-build frontend-bundle frontend-build frontend-dev
+.PHONY: test integration-test e2e-test build docker-build docker-build-push serve move-build move-test deploy-local deploy-stillness deploy-utopia dev npm-install integration-build frontend-bundle frontend-build frontend-dev
 
 DOCKER_IMAGE ?= gitea.solution-nine.monofuel.dev/monolab/capsuleer_courier_service2:latest
 DOCKER_PLATFORM ?= linux/amd64
@@ -84,6 +84,12 @@ move-test:
 
 deploy-local:
 	docker compose run --rm --service-ports sui-dev bash /opt/sui-dev/scripts/deploy.sh
+
+deploy-stillness:
+	docker compose run --rm --entrypoint bash sui-dev -c "bash /opt/sui-dev/scripts/deploy-testnet.sh stillness"
+
+deploy-utopia:
+	docker compose run --rm --entrypoint bash sui-dev -c "bash /opt/sui-dev/scripts/deploy-testnet.sh utopia"
 
 docker-build:
 	docker buildx build \

@@ -5,7 +5,7 @@
 import
   std/dom,
   nimponents,
-  ../sui_client
+  ../[sui_client, config]
 
 type WalletConnect* = ref object of WebComponent
 
@@ -39,7 +39,7 @@ proc render(self: WalletConnect) =
   else:
     var savedRpc, savedKey: cstring
     {.emit: """
-    `savedRpc` = localStorage.getItem('sui_rpc_url') || 'http://127.0.0.1:9000';
+    `savedRpc` = localStorage.getItem('sui_rpc_url') || `config.rpcUrl`;
     `savedKey` = localStorage.getItem('sui_private_key') || '';
     """.}
     self.innerHTML = cstring(
@@ -92,7 +92,7 @@ proc tryAutoConnect*() =
   {.emit: "`savedKey` = localStorage.getItem('sui_private_key') || '';".}
   if savedKey.len > 0:
     var savedRpc: cstring
-    {.emit: "`savedRpc` = localStorage.getItem('sui_rpc_url') || 'http://127.0.0.1:9000';".}
+    {.emit: "`savedRpc` = localStorage.getItem('sui_rpc_url') || `config.rpcUrl`;".}
     connectedClient = newSuiClient(savedRpc)
     connectedKeypair = newKeypairFromPrivateKey(savedKey)
     connectedAddress = connectedKeypair.getAddress()

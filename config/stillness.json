@@ -1,0 +1,8 @@
+{
+  "environment": "stillness",
+  "rpcUrl": "https://fullnode.testnet.sui.io:443",
+  "worldPackageId": "0x28b497559d65ab320d9da4613bf2498d5946b2c0ae3597ccfda3072ce127448c",
+  "packageId": "",
+  "configId": "",
+  "adminCapId": ""
+}

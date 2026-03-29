@@ -3,8 +3,8 @@
 import
   std/[dom, asyncjs],
   nimponents,
-  ../[sui_client, courier_client],
-  ./[wallet_connect, player_stats]
+  ../[sui_client, courier_client, config],
+  ./wallet_connect
 
 type AdminPanel* = ref object of WebComponent
 

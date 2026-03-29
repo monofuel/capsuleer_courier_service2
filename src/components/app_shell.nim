@@ -1,9 +1,10 @@
-## Main app shell component — layout with config inputs and child components.
+## Main app shell component — layout with environment selector and child components.
 
 {.push warning[UnusedImport]: off.}
 import
   std/dom,
   nimponents,
+  ../config,
   ./[wallet_connect, player_stats, create_delivery, courier_actions, admin_panel, delivery_list, leaderboard]
 {.pop.}
 
@@ -18,12 +19,15 @@ proc render(self: AppShell) =
     "</header>" &
     "<main>" &
     "<div class=\"config-bar\">" &
-    "<div class=\"form-group\"><label>Package ID</label>" &
-    "<input type=\"text\" id=\"package-id\" placeholder=\"0x...\" /></div>" &
-    "<div class=\"form-group\"><label>Config ID</label>" &
-    "<input type=\"text\" id=\"config-id\" placeholder=\"0x...\" /></div>" &
-    "<div class=\"form-group\"><label>AdminCap ID</label>" &
-    "<input type=\"text\" id=\"admincap-id\" placeholder=\"0x...\" /></div>" &
+    "<div class=\"env-selector\">" &
+    "<label>Environment</label>" &
+    "<div class=\"env-buttons\">" &
+    "<button class=\"btn btn-sm env-btn\" data-env=\"devnet\">Devnet</button>" &
+    "<button class=\"btn btn-sm env-btn\" data-env=\"utopia\">Utopia</button>" &
+    "<button class=\"btn btn-sm env-btn\" data-env=\"stillness\">Stillness</button>" &
+    "</div>" &
+    "<span class=\"env-active\" id=\"env-label\"></span>" &
+    "</div>" &
     "<div class=\"form-group\"><label>Display Name</label>" &
     "<input type=\"text\" id=\"display-name\" placeholder=\"Your name\" /></div>" &
     "<button class=\"btn btn-sm\" id=\"save-config\">Save</button></div>" &
@@ -37,49 +41,44 @@ proc render(self: AppShell) =
     "</div></main>"
   )
 
-  # Load saved config.
-  var savedPkg, savedCfg, savedCap, savedName: cstring
+  # Update environment label and button states.
+  let envLabel = self.querySelector("#env-label")
+  if not envLabel.isNil:
+    envLabel.innerHTML = activeEnvironment
+
   {.emit: """
-  `savedPkg` = localStorage.getItem('courier_package_id') || '';
-  `savedCfg` = localStorage.getItem('courier_config_id') || '';
-  `savedCap` = localStorage.getItem('courier_admincap_id') || '';
-  `savedName` = localStorage.getItem('courier_display_name') || '';
+  var btns = `self`.querySelectorAll('.env-btn');
+  for (var i = 0; i < btns.length; i++) {
+    if (btns[i].getAttribute('data-env') === `activeEnvironment`) {
+      btns[i].classList.add('active');
+    } else {
+      btns[i].classList.remove('active');
+    }
+    btns[i].addEventListener('click', function() {
+      var env = this.getAttribute('data-env');
+      `switchEnvironment`(env);
+      `self`.render();
+      // Re-trigger child components.
+      var children = `self`.querySelectorAll('player-stats, delivery-list, courier-leaderboard');
+      for (var j = 0; j < children.length; j++) {
+        if (children[j].connectedCallback) children[j].connectedCallback();
+      }
+    });
+  }
   """.}
 
-  let pkgInput = self.querySelector("#package-id").InputElement
-  let cfgInput = self.querySelector("#config-id").InputElement
-  let capInput = self.querySelector("#admincap-id").InputElement
+  # Load saved display name.
+  var savedName: cstring
+  {.emit: "`savedName` = localStorage.getItem('courier_display_name') || '';".}
   let nameInput = self.querySelector("#display-name").InputElement
-  if not pkgInput.isNil:
-    pkgInput.value = savedPkg
-  if not cfgInput.isNil:
-    cfgInput.value = savedCfg
-  if not capInput.isNil:
-    capInput.value = savedCap
   if not nameInput.isNil:
     nameInput.value = savedName
-
-  if savedPkg.len > 0:
-    packageId = savedPkg
-  if savedCfg.len > 0:
-    configId = savedCfg
-  if savedCap.len > 0:
-    adminCapId = savedCap
 
   let saveBtn = self.querySelector("#save-config")
   if not saveBtn.isNil:
     saveBtn.addEventListener("click", proc(e: Event) =
-      let pkg = self.querySelector("#package-id").InputElement.value
-      let cfg = self.querySelector("#config-id").InputElement.value
-      let cap = self.querySelector("#admincap-id").InputElement.value
       let displayName = self.querySelector("#display-name").InputElement.value
-      packageId = pkg
-      configId = cfg
-      adminCapId = cap
       {.emit: """
-      localStorage.setItem('courier_package_id', `pkg`);
-      localStorage.setItem('courier_config_id', `cfg`);
-      localStorage.setItem('courier_admincap_id', `cap`);
       localStorage.setItem('courier_display_name', `displayName`);
       if (`displayName` && window._courierAddress) {
         if (!window._nameCache) window._nameCache = {};
