@@ -195,6 +195,31 @@ proc getObjectJson*(rpcUrl: cstring, objectId: cstring): Future[JsObject] {.asyn
   """.}
   result = resp
 
+# --- Owned object queries via JSON-RPC ---
+
+proc getOwnedObjects*(rpcUrl: cstring, owner: cstring, structType: cstring): Future[JsObject] {.async.} =
+  ## Query objects owned by an address, filtered by struct type.
+  var resp: JsObject
+  {.emit: """
+  const response = await fetch(`rpcUrl`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'suix_getOwnedObjects',
+      params: [
+        `owner`,
+        { filter: { StructType: `structType` }, options: { showContent: true } },
+        null,
+        1
+      ]
+    })
+  });
+  `resp` = await response.json();
+  """.}
+  result = resp
+
 # --- Event queries via JSON-RPC ---
 
 proc queryEvents*(rpcUrl: cstring, eventType: cstring, limit: int = 50): Future[JsObject] {.async.} =

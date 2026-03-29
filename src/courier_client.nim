@@ -27,6 +27,73 @@ proc getAddressName*(address: cstring): cstring =
   """.}
   result = name
 
+proc resolveCharacterNames*(rpcUrl, worldPkgId: cstring, addresses: seq[cstring]): Future[void] {.async.} =
+  ## Batch-resolve wallet addresses to character names via PlayerProfile → Character lookup.
+  ## Silently skips addresses that can't be resolved. Results cached in window._nameCache.
+  if rpcUrl == nil or worldPkgId == nil:
+    return
+  {.emit: """
+  var addrs = `addresses`;
+  var rpc = `rpcUrl`;
+  var profileType = `worldPkgId` + '::character::PlayerProfile';
+
+  // Deduplicate and skip already-cached.
+  if (!window._nameCache) window._nameCache = {};
+  var unique = [];
+  var seen = {};
+  for (var i = 0; i < addrs.length; i++) {
+    var a = addrs[i];
+    if (!a || a === '' || a === '0x0' || seen[a] || window._nameCache[a]) continue;
+    seen[a] = true;
+    unique.push(a);
+  }
+
+  async function resolveOne(addr) {
+    try {
+      // Step 1: Find PlayerProfile owned by this address.
+      var profResp = await fetch(rpc, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0', id: 1,
+          method: 'suix_getOwnedObjects',
+          params: [addr, { filter: { StructType: profileType }, options: { showContent: true } }, null, 1]
+        })
+      }).then(function(r) { return r.json(); });
+
+      var profData = profResp.result && profResp.result.data;
+      if (!profData || profData.length === 0) return;
+
+      var charId = profData[0].data && profData[0].data.content &&
+                   profData[0].data.content.fields && profData[0].data.content.fields.character_id;
+      if (!charId) return;
+
+      // Step 2: Fetch Character object.
+      var charResp = await fetch(rpc, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0', id: 1,
+          method: 'sui_getObject',
+          params: [charId, { showContent: true }]
+        })
+      }).then(function(r) { return r.json(); });
+
+      var charFields = charResp.result && charResp.result.data &&
+                       charResp.result.data.content && charResp.result.data.content.fields;
+      if (!charFields || !charFields.metadata) return;
+
+      var meta = charFields.metadata.fields || charFields.metadata;
+      var name = meta.name;
+      if (name) window._nameCache[addr] = name;
+    } catch(e) {
+      // Silently skip — truncated address fallback works fine.
+    }
+  }
+
+  await Promise.all(unique.map(resolveOne));
+  """.}
+
 proc resolveAddressDisplay*(address: cstring): cstring =
   ## Return display name if cached, otherwise truncated address.
   let name = getAddressName(address)

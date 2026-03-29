@@ -25,14 +25,30 @@ proc connectedCallback(self: DeliveryList) =
   let cfgId = configId
   let pkgId = packageId
   let currentSsu = ssuId
+  let worldPkg = worldPackageId
 
   proc load() {.async.} =
     let deliveries = await queryDeliveries(rpcUrl, pkgId)
+
+    # Resolve character names for all addresses in deliveries.
+    var addrs: seq[cstring]
+    {.emit: """
+    `addrs` = [];
+    var _dd = `deliveries`;
+    for (var i = 0; i < _dd.length; i++) {
+      var d = _dd[i].Field1 || _dd[i];
+      if (d.receiver) `addrs`.push(d.receiver);
+      if (d.courier) `addrs`.push(d.courier);
+    }
+    """.}
+    await resolveCharacterNames(rpcUrl, worldPkg, addrs)
 
     {.emit: """
     var _dlData = `deliveries`;
     var connAddr = window._courierAddress || '';
     var curSsu = `currentSsu` || '';
+    var adminAddr = '0xafb51cd5dad394a2ad45397eb14545cf2fd52c8e314485233761cee0b35d1d24';
+    var isAdmin = (connAddr === adminAddr);
 
     function _dlAddr(a) {
       if (!a) return '';
@@ -56,13 +72,17 @@ proc connectedCallback(self: DeliveryList) =
     }
 
     // Split deliveries into 3 buckets.
+    // Admin sees own undelivered orders in both Pending and Available (for self-delivery testing).
     var pickup = [], pending = [], available = [];
     for (var i = 0; i < _dlData.length; i++) {
       var d = _dlData[i].Field1 || _dlData[i];
       var recv = d.receiver || '';
       var isMe = (recv === connAddr);
       if (d.delivered && isMe) pickup.push(d);
-      else if (!d.delivered && isMe) pending.push(d);
+      else if (!d.delivered && isMe) {
+        pending.push(d);
+        if (isAdmin) available.push(d);
+      }
       else if (!d.delivered && !isMe) available.push(d);
     }
 
@@ -124,12 +144,14 @@ proc connectedCallback(self: DeliveryList) =
         '</tr></thead><tbody>';
       for (var i = 0; i < available.length; i++) {
         var d = available[i];
+        var isSelfDeliver = isAdmin && (d.receiver === connAddr);
+        var btnLabel = isSelfDeliver ? 'Deliver <span class="admin-label">(admin)</span>' : 'Deliver';
         html += '<tr' + _ssuClass(d.storageUnitId) + '><td>' + d.deliveryId + '</td>' +
           '<td>' + _dlAddr(d.storageUnitId) + '</td>' +
           '<td>' + _dlTypeName(d.typeId) + '</td>' +
           '<td>' + d.quantity + '</td>' +
           '<td>' + _dlAddr(d.receiver) + '</td>' +
-          '<td><button class="btn btn-sm" data-action="deliver" data-id="' + d.deliveryId + '">Deliver</button></td></tr>';
+          '<td><button class="btn btn-sm" data-action="deliver" data-id="' + d.deliveryId + '">' + btnLabel + '</button></td></tr>';
       }
       html += '</tbody></table>';
     }
