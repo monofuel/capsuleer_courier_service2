@@ -14,6 +14,7 @@ var
   rpcUrl*: cstring = nil
   worldPackageId*: cstring = nil
   activeEnvironment*: cstring = "devnet"
+  isProduction*: bool = false
 
 proc applyConfig(cfg: cstring) =
   ## Apply a config object to global variables.
@@ -53,8 +54,10 @@ proc detectEnvironment*() =
   `tenant` = params.get('tenant') || '';
   """.}
   if tenant == "stillness":
+    isProduction = true
     switchEnvironment("stillness")
   elif tenant == "utopia":
+    isProduction = true
     switchEnvironment("utopia")
   else:
     switchEnvironment("devnet")

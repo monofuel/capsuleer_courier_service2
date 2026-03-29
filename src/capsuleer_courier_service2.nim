@@ -48,8 +48,12 @@ proc main() =
 
   let server = newServer(router)
   echo "Capsuleer Courier Service v" & Version
-  echo "Serving " & DefaultWebDir & "/ on http://localhost:" & $portNum
-  server.serve(port)
+  echo "Serving " & DefaultWebDir & "/ on http://0.0.0.0:" & $portNum
+  echo ""
+  echo "  Dev:       http://localhost:" & $portNum & "/"
+  echo "  Utopia:    http://localhost:" & $portNum & "/?tenant=utopia"
+  echo "  Stillness: http://localhost:" & $portNum & "/?tenant=stillness"
+  server.serve(port, "0.0.0.0")
 
 when isMainModule:
   main()

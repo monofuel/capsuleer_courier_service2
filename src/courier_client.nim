@@ -48,9 +48,9 @@ type
     delivered*: bool
     pickedUp*: bool
 
-proc setLikes*(client: SuiClient, keypair: Keypair, configId, adminCapId, packageId: cstring,
-               typeId: cstring, likes: cstring): Future[TransactionResult] {.async.} =
-  ## Configure likes reward for an item type. Requires AdminCap.
+proc buildSetLikes*(configId, adminCapId, packageId: cstring,
+                    typeId: cstring, likes: cstring): Transaction =
+  ## Build a set_likes transaction. Requires AdminCap.
   let tx = newTransaction()
   let target = cstring($packageId & "::" & CourierModule & "::set_likes")
   tx.moveCall(target, [
@@ -59,11 +59,11 @@ proc setLikes*(client: SuiClient, keypair: Keypair, configId, adminCapId, packag
     tx.txPureU64(typeId),
     tx.txPureU64(likes),
   ])
-  result = await client.signAndExecuteTransaction(tx, keypair)
+  result = tx
 
-proc createDeliveryRequest*(client: SuiClient, keypair: Keypair, configId, packageId: cstring,
-                            storageUnitId: cstring, typeId: cstring, quantity: int): Future[TransactionResult] {.async.} =
-  ## Request a delivery. Caller becomes the receiver.
+proc buildCreateDeliveryRequest*(configId, packageId: cstring,
+                                 storageUnitId: cstring, typeId: cstring, quantity: int): Transaction =
+  ## Build a create_delivery_request transaction.
   let tx = newTransaction()
   let target = cstring($packageId & "::" & CourierModule & "::create_delivery_request")
   tx.moveCall(target, [
@@ -72,29 +72,29 @@ proc createDeliveryRequest*(client: SuiClient, keypair: Keypair, configId, packa
     tx.txPureU64(typeId),
     tx.txPureU32(quantity),
   ])
-  result = await client.signAndExecuteTransaction(tx, keypair)
+  result = tx
 
-proc fulfillDelivery*(client: SuiClient, keypair: Keypair, configId, packageId: cstring,
-                      deliveryId: cstring): Future[TransactionResult] {.async.} =
-  ## Fulfill a delivery request. Caller becomes the courier.
+proc buildFulfillDelivery*(configId, packageId: cstring,
+                           deliveryId: cstring): Transaction =
+  ## Build a fulfill_delivery transaction.
   let tx = newTransaction()
   let target = cstring($packageId & "::" & CourierModule & "::fulfill_delivery")
   tx.moveCall(target, [
     tx.txObject(configId),
     tx.txPureU64(deliveryId),
   ])
-  result = await client.signAndExecuteTransaction(tx, keypair)
+  result = tx
 
-proc pickup*(client: SuiClient, keypair: Keypair, configId, packageId: cstring,
-             deliveryId: cstring): Future[TransactionResult] {.async.} =
-  ## Pick up a delivered item. Only the original receiver can call this.
+proc buildPickup*(configId, packageId: cstring,
+                  deliveryId: cstring): Transaction =
+  ## Build a pickup transaction.
   let tx = newTransaction()
   let target = cstring($packageId & "::" & CourierModule & "::pickup")
   tx.moveCall(target, [
     tx.txObject(configId),
     tx.txPureU64(deliveryId),
   ])
-  result = await client.signAndExecuteTransaction(tx, keypair)
+  result = tx
 
 # --- Event queries ---
 

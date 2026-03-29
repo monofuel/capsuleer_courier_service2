@@ -31,7 +31,7 @@ proc render(self: CreateDelivery) =
   let btn = self.querySelector("#create-btn")
   if not btn.isNil:
     btn.addEventListener("click", proc(e: Event) =
-      if connectedClient == nil or packageId == nil or configId == nil:
+      if connectedAddress == nil or packageId == nil or configId == nil:
         let status = self.querySelector("#create-status")
         if not status.isNil:
           status.innerHTML = "Not configured — set package and config IDs"
@@ -50,11 +50,12 @@ proc render(self: CreateDelivery) =
       statusDiv.innerHTML = "Submitting..."
 
       proc submit() {.async.} =
-        let txResult = await connectedClient.createDeliveryRequest(
-          connectedKeypair, configId, packageId, ssuId, typeId, qty)
+        let tx = buildCreateDeliveryRequest(configId, packageId, ssuId, typeId, qty)
+        let txResult = await signAndExecute(tx)
         if txResult.isSuccess():
           statusDiv.innerHTML = cstring("Delivery requested! Digest: " & $txResult.digest())
-          discard await connectedClient.waitForTransaction(txResult.digest())
+          if connectedClient != nil:
+            discard await connectedClient.waitForTransaction(txResult.digest())
           refreshStats()
           # Delay to allow event indexing before refresh.
           {.emit: "await new Promise(function(r) { setTimeout(r, 1000); });".}

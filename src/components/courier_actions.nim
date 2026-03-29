@@ -36,7 +36,7 @@ proc render(self: CourierActions) =
   let fulfillBtn = self.querySelector("#fulfill-btn")
   if not fulfillBtn.isNil:
     fulfillBtn.addEventListener("click", proc(e: Event) =
-      if connectedClient == nil or packageId == nil or configId == nil:
+      if connectedAddress == nil or packageId == nil or configId == nil:
         return
       let idInput = self.querySelector("#fulfill-id").InputElement
       let statusDiv = self.querySelector("#fulfill-status")
@@ -44,11 +44,12 @@ proc render(self: CourierActions) =
       statusDiv.innerHTML = "Submitting..."
 
       proc submit() {.async.} =
-        let txResult = await connectedClient.fulfillDelivery(
-          connectedKeypair, configId, packageId, deliveryId)
+        let tx = buildFulfillDelivery(configId, packageId, deliveryId)
+        let txResult = await signAndExecute(tx)
         if txResult.isSuccess():
           statusDiv.innerHTML = cstring("Delivered! Digest: " & $txResult.digest())
-          discard await connectedClient.waitForTransaction(txResult.digest())
+          if connectedClient != nil:
+            discard await connectedClient.waitForTransaction(txResult.digest())
           refreshStats()
           {.emit: "await new Promise(function(r) { setTimeout(r, 1000); });".}
           refreshDeliveryList()
@@ -63,7 +64,7 @@ proc render(self: CourierActions) =
   let pickupBtn = self.querySelector("#pickup-btn")
   if not pickupBtn.isNil:
     pickupBtn.addEventListener("click", proc(e: Event) =
-      if connectedClient == nil or packageId == nil or configId == nil:
+      if connectedAddress == nil or packageId == nil or configId == nil:
         return
       let idInput = self.querySelector("#pickup-id").InputElement
       let statusDiv = self.querySelector("#pickup-status")
@@ -71,11 +72,12 @@ proc render(self: CourierActions) =
       statusDiv.innerHTML = "Submitting..."
 
       proc submit() {.async.} =
-        let txResult = await connectedClient.pickup(
-          connectedKeypair, configId, packageId, deliveryId)
+        let tx = buildPickup(configId, packageId, deliveryId)
+        let txResult = await signAndExecute(tx)
         if txResult.isSuccess():
           statusDiv.innerHTML = cstring("Picked up! Digest: " & $txResult.digest())
-          discard await connectedClient.waitForTransaction(txResult.digest())
+          if connectedClient != nil:
+            discard await connectedClient.waitForTransaction(txResult.digest())
           refreshStats()
           {.emit: "await new Promise(function(r) { setTimeout(r, 1000); });".}
           refreshDeliveryList()

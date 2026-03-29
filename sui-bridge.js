@@ -4,5 +4,6 @@ import { SuiClient } from '@mysten/sui/client';
 import { Transaction } from '@mysten/sui/transactions';
 import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
 import { decodeSuiPrivateKey } from '@mysten/sui/cryptography';
+import { getWallets } from '@mysten/wallet-standard';
 
-window.SuiSDK = { SuiClient, Transaction, Ed25519Keypair, decodeSuiPrivateKey };
+window.SuiSDK = { SuiClient, Transaction, Ed25519Keypair, decodeSuiPrivateKey, getWallets };

@@ -14,6 +14,7 @@ var SuiClientClass = null;
 var TransactionClass = null;
 var Ed25519KeypairClass = null;
 var decodeSuiPrivateKeyFn = null;
+var getWalletsFn = null;
 """.}
 
 proc initSuiSdk*(): Future[void] {.async.} =
@@ -28,6 +29,7 @@ proc initSuiSdk*(): Future[void] {.async.} =
     TransactionClass = window.SuiSDK.Transaction;
     Ed25519KeypairClass = window.SuiSDK.Ed25519Keypair;
     decodeSuiPrivateKeyFn = window.SuiSDK.decodeSuiPrivateKey;
+    getWalletsFn = window.SuiSDK.getWallets;
   } else {
     const clientMod = await import('@mysten/sui/client');
     const txMod = await import('@mysten/sui/transactions');
@@ -37,6 +39,10 @@ proc initSuiSdk*(): Future[void] {.async.} =
     TransactionClass = txMod.Transaction;
     Ed25519KeypairClass = kpMod.Ed25519Keypair;
     decodeSuiPrivateKeyFn = cryptoMod.decodeSuiPrivateKey;
+    try {
+      const walletMod = await import('@mysten/wallet-standard');
+      getWalletsFn = walletMod.getWallets;
+    } catch(e) { /* wallet-standard not available in node */ }
   }
   """.}
   sdkLoaded = true
@@ -205,6 +211,158 @@ proc queryEvents*(rpcUrl: cstring, eventType: cstring, limit: int = 50): Future[
   result = resp
 
 # --- Async error helper ---
+
+# --- Wallet Standard (EVE Vault) ---
+
+type
+  WalletStandard* = ref object of JsObject
+  WalletAccount* = ref object of JsObject
+
+## JS helper: match wallet name using substring (same as official @evefrontier/dapp-kit).
+## Matches "Eve Vault" and "EVE Frontier Client Wallet (Eve Vault Like)" etc.
+{.emit: """
+function _isEveWallet(name) {
+  return name && (name.indexOf('Eve Vault') !== -1 || name.indexOf('EVE Frontier') !== -1);
+}
+
+function _findEveWalletInList(walletList) {
+  for (var i = 0; i < walletList.length; i++) {
+    if (_isEveWallet(walletList[i].name)) return walletList[i];
+  }
+  return null;
+}
+
+function _discoverWalletsViaEvent() {
+  // Use the wallet-standard app-ready event protocol to discover wallets.
+  // This works even without getWallets() — wallets that called registerWallet()
+  // have a permanent listener for this event.
+  var discovered = [];
+  try {
+    var evt = new CustomEvent('wallet-standard:app-ready', {
+      detail: {
+        register: function() {
+          for (var i = 0; i < arguments.length; i++) discovered.push(arguments[i]);
+        }
+      }
+    });
+    window.dispatchEvent(evt);
+  } catch(e) {
+    console.error('[CCS] app-ready dispatch failed:', e);
+  }
+  return discovered;
+}
+""".}
+
+proc findEveVault*(): WalletStandard =
+  ## Find an EVE wallet. Tries getWallets API first, then raw event protocol.
+  var wallet: WalletStandard
+  {.emit: """
+  `wallet` = null;
+  // Try bundled getWallets API.
+  if (getWalletsFn) {
+    var api = getWalletsFn();
+    `wallet` = _findEveWalletInList(api.get());
+  }
+  // Fallback: raw event protocol.
+  if (!`wallet`) {
+    `wallet` = _findEveWalletInList(_discoverWalletsViaEvent());
+  }
+  """.}
+  result = wallet
+
+proc listWallets*(): cstring =
+  ## Debug: list all registered wallet names.
+  var names: cstring
+  {.emit: """
+  var arr = [];
+  if (getWalletsFn) {
+    var all = getWalletsFn().get();
+    for (var i = 0; i < all.length; i++) arr.push(all[i].name);
+  }
+  var discovered = _discoverWalletsViaEvent();
+  for (var i = 0; i < discovered.length; i++) {
+    if (arr.indexOf(discovered[i].name) === -1) arr.push(discovered[i].name);
+  }
+  `names` = arr.length ? arr.join(', ') : '(none found)';
+  """.}
+  result = names
+
+proc waitForEveVault*(callback: proc(wallet: WalletStandard)) =
+  ## Wait for EVE Vault to register. Checks immediately, then listens for late arrivals.
+  let existing = findEveVault()
+  if not existing.isNil:
+    callback(existing)
+    return
+  {.emit: """
+  var found = false;
+  var cb = `callback`;
+
+  // Listen for future wallet registrations via raw event protocol.
+  window.addEventListener('wallet-standard:register-wallet', function(evt) {
+    if (found) return;
+    if (evt.detail && typeof evt.detail === 'function') {
+      evt.detail({
+        register: function() {
+          if (found) return;
+          for (var i = 0; i < arguments.length; i++) {
+            if (_isEveWallet(arguments[i].name)) {
+              found = true;
+              cb(arguments[i]);
+              return;
+            }
+          }
+        }
+      });
+    }
+  });
+
+  // Also poll via getWallets if available.
+  if (getWalletsFn) {
+    var api = getWalletsFn();
+    var off = api.on('register', function() {
+      if (found) return;
+      var w = _findEveWalletInList(api.get());
+      if (w) { found = true; off(); cb(w); }
+    });
+  }
+
+  // Timeout after 5 seconds.
+  setTimeout(function() {
+    if (!found) {
+      found = true;
+      cb(null);
+    }
+  }, 5000);
+  """.}
+
+proc walletConnect*(wallet: WalletStandard): Future[WalletAccount] {.async.} =
+  ## Connect to a Wallet Standard wallet. Returns the first account.
+  var account: WalletAccount
+  {.emit: """
+  var connectFeature = `wallet`.features['standard:connect'];
+  var result = await connectFeature.connect();
+  `account` = (result.accounts && result.accounts.length > 0) ? result.accounts[0] : null;
+  """.}
+  result = account
+
+proc walletAddress*(account: WalletAccount): cstring =
+  ## Get the address from a wallet account.
+  var address: cstring
+  {.emit: "`address` = `account` ? `account`.address : null;".}
+  result = address
+
+proc walletSignAndExecute*(wallet: WalletStandard, tx: Transaction, account: WalletAccount, chain: cstring): Future[TransactionResult] {.async.} =
+  ## Sign and execute a transaction via Wallet Standard (EVE Vault).
+  var res: TransactionResult
+  {.emit: """
+  var feature = `wallet`.features['sui:signAndExecuteTransaction'];
+  `res` = await feature.signAndExecuteTransaction({
+    transaction: `tx`,
+    account: `account`,
+    chain: `chain`
+  });
+  """.}
+  result = res
 
 proc runWithErrorHandler*(future: Future[void], statusElement: auto) =
   ## Run an async future and display errors in a DOM element.

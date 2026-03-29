@@ -28,7 +28,7 @@ proc render(self: AdminPanel) =
   let btn = self.querySelector("#set-likes-btn")
   if not btn.isNil:
     btn.addEventListener("click", proc(e: Event) =
-      if connectedClient == nil or packageId == nil or configId == nil or adminCapId == nil:
+      if connectedAddress == nil or packageId == nil or configId == nil or adminCapId == nil:
         let status = self.querySelector("#likes-status")
         if not status.isNil:
           status.innerHTML = "Not configured — set package, config, and admin cap IDs"
@@ -42,10 +42,11 @@ proc render(self: AdminPanel) =
       statusDiv.innerHTML = "Submitting..."
 
       proc submit() {.async.} =
-        let txResult = await connectedClient.setLikes(
-          connectedKeypair, configId, adminCapId, packageId, typeId, likesVal)
+        let tx = buildSetLikes(configId, adminCapId, packageId, typeId, likesVal)
+        let txResult = await signAndExecute(tx)
         if txResult.isSuccess():
-          discard await connectedClient.waitForTransaction(txResult.digest())
+          if connectedClient != nil:
+            discard await connectedClient.waitForTransaction(txResult.digest())
           statusDiv.innerHTML = cstring("Likes set! Digest: " & $txResult.digest())
         else:
           statusDiv.innerHTML = "Transaction failed"

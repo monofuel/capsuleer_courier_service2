@@ -32,4 +32,10 @@ proc main() {.async.} =
   # Auto-connect from saved credentials now that the SDK is ready.
   tryAutoConnect()
 
-discard main()
+{.emit: """
+`main`().catch(function(err) {
+  console.error('Init error:', err);
+  var el = document.querySelector('courier-app');
+  if (el) el.innerHTML = '<div class="error" style="padding:1em"><h2>Initialization Error</h2><pre>' + err.message + '</pre></div>';
+});
+""".}
