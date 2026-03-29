@@ -7,10 +7,22 @@ module capsuleer_courier_service::courier_service;
 
 use sui::dynamic_field as df;
 use sui::event;
+use sui::hash;
+use sui::bcs;
 use capsuleer_courier_service::config::{Self, ExtensionConfig, AdminCap, CourierAuth};
 use world::storage_unit::StorageUnit;
 use world::character::Character;
 use world::inventory::Item;
+
+// === Constants ===
+
+/// Likes are stored as millilikes (×1000) for fractional precision.
+/// Example: 400 millilikes = 0.4 likes per item.
+/// Award calculation: (millilikes * quantity) / LIKES_PRECISION
+const LIKES_PRECISION: u64 = 1000;
+
+/// Hardcoded admin address — allowed to self-deliver for testing/operations.
+const ADMIN_ADDRESS: address = @0xafb51cd5dad394a2ad45397eb14545cf2fd52c8e314485233761cee0b35d1d24;
 
 // === Error codes ===
 
@@ -38,6 +50,9 @@ const EItemMismatch: vector<u8> = b"Item type or quantity does not match deliver
 #[error]
 const EStorageUnitMismatch: vector<u8> = b"Storage unit does not match delivery request";
 
+#[error]
+const ESelfDelivery: vector<u8> = b"Courier cannot fulfill their own delivery request";
+
 // === Data structures (stored as dynamic fields on ExtensionConfig) ===
 
 public struct DeliveryKey has copy, drop, store { id: u64 }
@@ -59,7 +74,7 @@ public struct PlayerMetrics has store, drop {
 
 public struct ItemLikesKey has copy, drop, store { type_id: u64 }
 public struct ItemLikes has store, drop {
-    likes: u64,
+    millilikes: u64,
 }
 
 public struct NextDeliveryIdKey has copy, drop, store {}
@@ -87,20 +102,20 @@ public struct DeliveryPickedUp has copy, drop {
 
 // === Public functions ===
 
-/// Request a delivery. Caller becomes the receiver.
+/// Request a delivery. Caller becomes the receiver. Returns the delivery ID.
 public fun create_delivery_request(
     config: &mut ExtensionConfig,
     storage_unit_id: ID,
     type_id: u64,
     quantity: u32,
     ctx: &mut TxContext,
-) {
+): u64 {
     // Validate quantity
     assert!(quantity >= 1 && quantity <= 500, EInvalidQuantity);
 
-    // Auto-configure 1 like for new item types.
+    // Auto-configure 1.0 likes (1000 millilikes) for new item types.
     if (!df::exists_(config.uid(), ItemLikesKey { type_id })) {
-        df::add(config.uid_mut(), ItemLikesKey { type_id }, ItemLikes { likes: 1 });
+        df::add(config.uid_mut(), ItemLikesKey { type_id }, ItemLikes { millilikes: LIKES_PRECISION });
     };
 
     // Check pending count
@@ -113,8 +128,8 @@ public fun create_delivery_request(
     assert!(metrics.pending_supply_count < 5, ETooManyPending);
     metrics.pending_supply_count = metrics.pending_supply_count + 1;
 
-    // Get next delivery ID
-    let delivery_id = next_delivery_id(config);
+    // Get next delivery ID (hash-based)
+    let delivery_id = next_delivery_id(config, ctx);
 
     // Create delivery record
     df::add(
@@ -137,11 +152,14 @@ public fun create_delivery_request(
         quantity,
         receiver,
     });
+
+    delivery_id
 }
 
 /// Fulfill a delivery request. Caller becomes the sender (courier).
 /// The courier must provide the correct Item (matching type and quantity).
 /// The item is deposited into the SSU's open inventory for the receiver to pick up.
+/// Self-delivery is blocked unless the courier is the hardcoded admin address.
 ///
 /// Typical PTB flow:
 ///   1. Courier calls `withdraw_by_owner` to get an Item from their owned inventory
@@ -152,6 +170,77 @@ public fun fulfill_delivery(
     character: &Character,
     item: Item,
     delivery_id: u64,
+    ctx: &mut TxContext,
+) {
+    let key = DeliveryKey { id: delivery_id };
+    assert!(df::exists_(config.uid(), key), EDeliveryNotFound);
+
+    // Check self-delivery before mutable borrow
+    let courier = ctx.sender();
+    {
+        let delivery: &Delivery = df::borrow(config.uid(), key);
+        assert!(!delivery.delivered, EAlreadyDelivered);
+        assert!(courier != delivery.receiver || courier == ADMIN_ADDRESS, ESelfDelivery);
+    };
+
+    // Mutable borrow for the rest of the logic
+    let delivery: &mut Delivery = df::borrow_mut(config.uid_mut(), key);
+
+    // Validate item matches the delivery request
+    assert!(
+        item.type_id() == delivery.type_id && item.quantity() == delivery.quantity,
+        EItemMismatch,
+    );
+
+    // Validate storage unit matches
+    assert!(
+        object::id(storage_unit) == delivery.storage_unit_id,
+        EStorageUnitMismatch,
+    );
+
+    // Deposit item to open inventory (extension-controlled escrow)
+    storage_unit.deposit_to_open_inventory<CourierAuth>(
+        character,
+        item,
+        config::courier_auth(),
+        ctx,
+    );
+
+    // Mark as delivered
+    delivery.delivered = true;
+    delivery.sender = courier;
+
+    // Calculate and award likes
+    let type_id = delivery.type_id;
+    let quantity = delivery.quantity;
+    let item_likes: &ItemLikes = df::borrow(config.uid(), ItemLikesKey { type_id });
+    let likes_earned = (item_likes.millilikes * (quantity as u64)) / LIKES_PRECISION;
+
+    // Update courier metrics
+    ensure_player_metrics(config, courier);
+    let metrics: &mut PlayerMetrics = df::borrow_mut(
+        config.uid_mut(),
+        PlayerMetricsKey { player: courier },
+    );
+    metrics.likes = metrics.likes + likes_earned;
+    metrics.deliveries_completed = metrics.deliveries_completed + 1;
+
+    event::emit(DeliveryFulfilled {
+        delivery_id,
+        courier,
+        likes_earned,
+    });
+}
+
+/// Admin fulfill: same as fulfill_delivery but skips the self-delivery check.
+/// AdminCap holders can fulfill their own delivery requests.
+public fun admin_fulfill_delivery(
+    config: &mut ExtensionConfig,
+    storage_unit: &mut StorageUnit,
+    character: &Character,
+    item: Item,
+    delivery_id: u64,
+    _admin_cap: &AdminCap,
     ctx: &mut TxContext,
 ) {
     let key = DeliveryKey { id: delivery_id };
@@ -189,7 +278,7 @@ public fun fulfill_delivery(
     let type_id = delivery.type_id;
     let quantity = delivery.quantity;
     let item_likes: &ItemLikes = df::borrow(config.uid(), ItemLikesKey { type_id });
-    let likes_earned = item_likes.likes * (quantity as u64);
+    let likes_earned = (item_likes.millilikes * (quantity as u64)) / LIKES_PRECISION;
 
     // Update courier metrics
     ensure_player_metrics(config, courier);
@@ -267,14 +356,18 @@ public fun pickup(
     });
 }
 
-/// Admin: configure likes reward for an item type.
+/// Admin: configure millilikes reward for an item type.
+/// Access control: Move's type system enforces that only AdminCap holders can call this
+/// function — a transaction without a valid AdminCap reference cannot invoke set_likes.
+/// The millilikes value uses ×1000 precision (e.g., 400 = 0.4 likes per item).
+/// Set to 0 to disable likes for an item type (anti-gaming tool).
 public fun set_likes(
     config: &mut ExtensionConfig,
     admin_cap: &AdminCap,
     type_id: u64,
-    likes: u64,
+    millilikes: u64,
 ) {
-    config.set_rule(admin_cap, ItemLikesKey { type_id }, ItemLikes { likes });
+    config.set_rule(admin_cap, ItemLikesKey { type_id }, ItemLikes { millilikes });
 }
 
 // === View functions ===
@@ -289,14 +382,15 @@ public fun get_player_metrics(config: &ExtensionConfig, player: address): (u64, 
     (metrics.likes, metrics.deliveries_completed, metrics.pending_supply_count)
 }
 
-/// Get the likes reward configured for an item type.
+/// Get the millilikes reward configured for an item type.
+/// Returns raw millilikes value (divide by 1000 for display).
 public fun get_item_likes(config: &ExtensionConfig, type_id: u64): u64 {
     let key = ItemLikesKey { type_id };
     if (!df::exists_(config.uid(), key)) {
         return 0
     };
     let item_likes: &ItemLikes = df::borrow(config.uid(), key);
-    item_likes.likes
+    item_likes.millilikes
 }
 
 /// Get a delivery by ID.
@@ -305,6 +399,7 @@ public fun get_delivery(
     delivery_id: u64,
 ): (ID, u64, u32, address, address, bool) {
     let key = DeliveryKey { id: delivery_id };
+    assert!(df::exists_(config.uid(), key), EDeliveryNotFound);
     let delivery: &Delivery = df::borrow(config.uid(), key);
     (
         delivery.storage_unit_id,
@@ -334,14 +429,28 @@ fun ensure_player_metrics(config: &mut ExtensionConfig, player: address) {
     };
 }
 
-/// Get the next delivery ID and increment the counter.
-fun next_delivery_id(config: &mut ExtensionConfig): u64 {
+/// Generate a hash-based delivery ID from (sender, counter).
+/// Counter ensures uniqueness; hash makes IDs unpredictable.
+fun next_delivery_id(config: &mut ExtensionConfig, ctx: &TxContext): u64 {
     let key = NextDeliveryIdKey {};
     if (!df::exists_(config.uid(), key)) {
         df::add(config.uid_mut(), key, 0u64);
     };
     let counter: &mut u64 = df::borrow_mut(config.uid_mut(), key);
-    let id = *counter;
+    let current = *counter;
     *counter = *counter + 1;
+
+    // Hash (sender_address, counter) to produce unpredictable ID
+    let mut data = bcs::to_bytes(&ctx.sender());
+    data.append(bcs::to_bytes(&current));
+    let hash_bytes = hash::blake2b256(&data);
+
+    // Take first 8 bytes as u64
+    let mut id: u64 = 0;
+    let mut i = 0;
+    while (i < 8) {
+        id = (id << 8) | (*hash_bytes.borrow(i) as u64);
+        i = i + 1;
+    };
     id
 }

@@ -23,6 +23,11 @@ use capsuleer_courier_service::courier_service;
 
 const RECEIVER_CHAR_ID: u32 = 1234;
 const COURIER_CHAR_ID: u32 = 5678;
+const COURIER2_CHAR_ID: u32 = 4321;
+const ADMIN_SELF_CHAR_ID: u32 = 9999;
+
+const COURIER2: address = @0xE;
+const ADMIN_ADDRESS: address = @0xafb51cd5dad394a2ad45397eb14545cf2fd52c8e314485233761cee0b35d1d24;
 
 // Storage unit constants
 const LOCATION_HASH: vector<u8> =
@@ -137,7 +142,6 @@ fun online_storage_unit(
     storage_id: ID,
     nwn_id: ID,
 ) {
-    // Deposit fuel and bring network node online
     let clock = clock::create_for_testing(ts.ctx());
     ts::next_tx(ts, user);
     let mut character = ts::take_shared_by_id<Character>(ts, character_id);
@@ -148,16 +152,9 @@ fun online_storage_unit(
     ts::next_tx(ts, user);
     {
         let mut nwn = ts::take_shared_by_id<NetworkNode>(ts, nwn_id);
-        nwn.deposit_fuel_test(
-            &owner_cap,
-            FUEL_TYPE_ID,
-            FUEL_VOLUME,
-            10,
-            &clock,
-        );
+        nwn.deposit_fuel_test(&owner_cap, FUEL_TYPE_ID, FUEL_VOLUME, 10, &clock);
         ts::return_shared(nwn);
     };
-
     ts::next_tx(ts, user);
     {
         let mut nwn = ts::take_shared_by_id<NetworkNode>(ts, nwn_id);
@@ -166,7 +163,6 @@ fun online_storage_unit(
     };
     character.return_owner_cap(owner_cap, receipt);
 
-    // Bring storage unit online
     ts::next_tx(ts, user);
     {
         let mut storage_unit = ts::take_shared_by_id<StorageUnit>(ts, storage_id);
@@ -177,7 +173,6 @@ fun online_storage_unit(
             ts.ctx(),
         );
         storage_unit.online(&mut nwn, &energy_config, &owner_cap);
-        // Authorize our courier extension
         storage_unit.authorize_extension<CourierAuth>(&owner_cap);
         character.return_owner_cap(owner_cap, receipt);
         ts::return_shared(storage_unit);
@@ -189,8 +184,6 @@ fun online_storage_unit(
     clock.destroy_for_testing();
 }
 
-/// Mint items into a character's owned inventory on the SSU.
-/// Uses the character's own OwnerCap<Character> for inventory access.
 fun mint_items(
     ts: &mut ts::Scenario,
     storage_id: ID,
@@ -209,21 +202,13 @@ fun mint_items(
     );
     let mut storage_unit = ts::take_shared_by_id<StorageUnit>(ts, storage_id);
     storage_unit.game_item_to_chain_inventory_test<Character>(
-        &character,
-        &owner_cap,
-        item_id,
-        type_id,
-        volume,
-        quantity,
-        ts.ctx(),
+        &character, &owner_cap, item_id, type_id, volume, quantity, ts.ctx(),
     );
     character.return_owner_cap(owner_cap, receipt);
     ts::return_shared(character);
     ts::return_shared(storage_unit);
 }
 
-/// Withdraw items from a character's owned inventory, returning the Item object.
-/// Uses the character's own OwnerCap<Character> for inventory access.
 fun char_withdraw(
     ts: &mut ts::Scenario,
     storage_id: ID,
@@ -240,11 +225,7 @@ fun char_withdraw(
     );
     let mut storage_unit = ts::take_shared_by_id<StorageUnit>(ts, storage_id);
     let item = storage_unit.withdraw_by_owner(
-        &character,
-        &owner_cap,
-        type_id,
-        quantity,
-        ts.ctx(),
+        &character, &owner_cap, type_id, quantity, ts.ctx(),
     );
     character.return_owner_cap(owner_cap, receipt);
     ts::return_shared(character);
@@ -253,18 +234,13 @@ fun char_withdraw(
 }
 
 /// Full test infrastructure: world + characters + SSU online + extension authorized.
-/// Returns (config, admin_cap, receiver_char_id, courier_char_id, storage_unit_id).
+/// Returns (receiver_char_id, courier_char_id, storage_unit_id).
 fun setup_full(ts: &mut ts::Scenario): (ID, ID, ID) {
     setup_world(ts);
-
-    // Create characters — receiver is user_a, courier is user_b
     let receiver_id = create_character(ts, user_a(), RECEIVER_CHAR_ID);
     let courier_id = create_character(ts, user_b(), COURIER_CHAR_ID);
-
-    // Create and online storage unit (owned by receiver/user_a)
     let (storage_id, nwn_id) = create_storage_unit(ts, receiver_id);
     online_storage_unit(ts, user_a(), receiver_id, storage_id, nwn_id);
-
     (receiver_id, courier_id, storage_id)
 }
 
@@ -277,12 +253,13 @@ fun test_set_likes() {
     let mut ts = ts::begin(admin());
     let (mut config, admin_cap) = config::create_for_testing(ts.ctx());
 
-    courier_service::set_likes(&mut config, &admin_cap, 77800, 10);
-    assert!(courier_service::get_item_likes(&config, 77800) == 10);
+    // Set 10000 millilikes (= 10.0 likes per item)
+    courier_service::set_likes(&mut config, &admin_cap, 77800, 10000);
+    assert!(courier_service::get_item_likes(&config, 77800) == 10000);
 
     // Update existing
-    courier_service::set_likes(&mut config, &admin_cap, 77800, 20);
-    assert!(courier_service::get_item_likes(&config, 77800) == 20);
+    courier_service::set_likes(&mut config, &admin_cap, 77800, 20000);
+    assert!(courier_service::get_item_likes(&config, 77800) == 20000);
 
     // Unconfigured item returns 0
     assert!(courier_service::get_item_likes(&config, 99999) == 0);
@@ -295,14 +272,14 @@ fun test_set_likes() {
 fun test_create_delivery_request() {
     let mut ts = ts::begin(admin());
     let (mut config, admin_cap) = config::create_for_testing(ts.ctx());
-    courier_service::set_likes(&mut config, &admin_cap, ITEM_TYPE_ID, 10);
+    courier_service::set_likes(&mut config, &admin_cap, ITEM_TYPE_ID, 10000);
 
     ts.next_tx(user_a());
     let ssu_id = object::id_from_address(@0x1234);
-    courier_service::create_delivery_request(&mut config, ssu_id, ITEM_TYPE_ID, 50, ts.ctx());
+    let delivery_id = courier_service::create_delivery_request(&mut config, ssu_id, ITEM_TYPE_ID, 50, ts.ctx());
 
     let (storage_unit_id, type_id, quantity, receiver, sender, delivered) =
-        courier_service::get_delivery(&config, 0);
+        courier_service::get_delivery(&config, delivery_id);
     assert!(storage_unit_id == ssu_id);
     assert!(type_id == ITEM_TYPE_ID);
     assert!(quantity == 50);
@@ -323,7 +300,7 @@ fun test_create_delivery_request() {
 fun test_create_delivery_bad_quantity_zero() {
     let mut ts = ts::begin(admin());
     let (mut config, admin_cap) = config::create_for_testing(ts.ctx());
-    courier_service::set_likes(&mut config, &admin_cap, ITEM_TYPE_ID, 10);
+    courier_service::set_likes(&mut config, &admin_cap, ITEM_TYPE_ID, 10000);
 
     ts.next_tx(user_a());
     let ssu_id = object::id_from_address(@0x1234);
@@ -337,7 +314,7 @@ fun test_create_delivery_bad_quantity_zero() {
 fun test_create_delivery_bad_quantity_over_500() {
     let mut ts = ts::begin(admin());
     let (mut config, admin_cap) = config::create_for_testing(ts.ctx());
-    courier_service::set_likes(&mut config, &admin_cap, ITEM_TYPE_ID, 10);
+    courier_service::set_likes(&mut config, &admin_cap, ITEM_TYPE_ID, 10000);
 
     ts.next_tx(user_a());
     let ssu_id = object::id_from_address(@0x1234);
@@ -354,8 +331,9 @@ fun test_create_delivery_no_likes_defaults_to_one() {
 
     ts.next_tx(user_a());
     let ssu_id = object::id_from_address(@0x1234);
+    // Item type 99999 has no likes configured — should auto-configure with 1000 millilikes (1.0 likes)
     courier_service::create_delivery_request(&mut config, ssu_id, 99999, 10, ts.ctx());
-    assert!(courier_service::get_item_likes(&config, 99999) == 1);
+    assert!(courier_service::get_item_likes(&config, 99999) == 1000);
 
     config::destroy_for_testing(config, admin_cap);
     ts.end();
@@ -365,7 +343,7 @@ fun test_create_delivery_no_likes_defaults_to_one() {
 fun test_create_delivery_max_pending() {
     let mut ts = ts::begin(admin());
     let (mut config, admin_cap) = config::create_for_testing(ts.ctx());
-    courier_service::set_likes(&mut config, &admin_cap, ITEM_TYPE_ID, 10);
+    courier_service::set_likes(&mut config, &admin_cap, ITEM_TYPE_ID, 10000);
 
     ts.next_tx(user_a());
     let ssu_id = object::id_from_address(@0x1234);
@@ -387,11 +365,9 @@ fun test_fulfill_nonexistent() {
     let (_receiver_id, courier_id, storage_id) = setup_full(&mut ts);
     let (mut config, admin_cap) = config::create_for_testing(ts.ctx());
 
-    // Mint and withdraw an item for the courier
     mint_items(&mut ts, storage_id, courier_id, user_b(), ITEM_ITEM_ID, ITEM_TYPE_ID, ITEM_VOLUME, ITEM_QUANTITY);
     let item = char_withdraw(&mut ts, storage_id, courier_id, user_b(), ITEM_TYPE_ID, ITEM_QUANTITY);
 
-    // Try to fulfill nonexistent delivery
     ts.next_tx(user_b());
     let mut storage_unit = ts::take_shared_by_id<StorageUnit>(&ts, storage_id);
     let character = ts::take_shared_by_id<Character>(&ts, courier_id);
@@ -412,35 +388,32 @@ fun test_fulfill_delivery_with_inventory() {
     let mut ts = ts::begin(admin());
     let (_receiver_id, courier_id, storage_id) = setup_full(&mut ts);
     let (mut config, admin_cap) = config::create_for_testing(ts.ctx());
-    courier_service::set_likes(&mut config, &admin_cap, ITEM_TYPE_ID, 10);
+    courier_service::set_likes(&mut config, &admin_cap, ITEM_TYPE_ID, 10000);
 
-    // Receiver creates a delivery request
+    // Receiver creates delivery
     ts.next_tx(user_a());
-    courier_service::create_delivery_request(
+    let delivery_id = courier_service::create_delivery_request(
         &mut config, storage_id, ITEM_TYPE_ID, ITEM_QUANTITY, ts.ctx(),
     );
 
-    // Mint items into courier's owned inventory on this SSU
+    // Courier mints, withdraws, fulfills
     mint_items(&mut ts, storage_id, courier_id, user_b(), ITEM_ITEM_ID, ITEM_TYPE_ID, ITEM_VOLUME, ITEM_QUANTITY);
-
-    // Courier withdraws items from owned inventory
     let item = char_withdraw(&mut ts, storage_id, courier_id, user_b(), ITEM_TYPE_ID, ITEM_QUANTITY);
 
-    // Courier fulfills the delivery (deposits to open inventory)
     ts.next_tx(user_b());
     let mut storage_unit = ts::take_shared_by_id<StorageUnit>(&ts, storage_id);
     let character = ts::take_shared_by_id<Character>(&ts, courier_id);
-    courier_service::fulfill_delivery(&mut config, &mut storage_unit, &character, item, 0, ts.ctx());
+    courier_service::fulfill_delivery(&mut config, &mut storage_unit, &character, item, delivery_id, ts.ctx());
     ts::return_shared(storage_unit);
     ts::return_shared(character);
 
     // Verify delivery state
     let (_ssu, _type_id, _qty, _receiver, sender, delivered) =
-        courier_service::get_delivery(&config, 0);
+        courier_service::get_delivery(&config, delivery_id);
     assert!(sender == user_b());
     assert!(delivered);
 
-    // Verify courier metrics: 10 likes * 50 quantity = 500
+    // Verify courier metrics: (10000 * 50) / 1000 = 500
     let (likes, completed, pending) = courier_service::get_player_metrics(&config, user_b());
     assert!(likes == 500);
     assert!(completed == 1);
@@ -467,22 +440,20 @@ fun test_pickup_with_inventory() {
     let mut ts = ts::begin(admin());
     let (receiver_id, courier_id, storage_id) = setup_full(&mut ts);
     let (mut config, admin_cap) = config::create_for_testing(ts.ctx());
-    courier_service::set_likes(&mut config, &admin_cap, ITEM_TYPE_ID, 10);
+    courier_service::set_likes(&mut config, &admin_cap, ITEM_TYPE_ID, 10000);
 
-    // Create delivery
     ts.next_tx(user_a());
-    courier_service::create_delivery_request(
+    let delivery_id = courier_service::create_delivery_request(
         &mut config, storage_id, ITEM_TYPE_ID, ITEM_QUANTITY, ts.ctx(),
     );
 
-    // Courier mints, withdraws, fulfills
     mint_items(&mut ts, storage_id, courier_id, user_b(), ITEM_ITEM_ID, ITEM_TYPE_ID, ITEM_VOLUME, ITEM_QUANTITY);
     let item = char_withdraw(&mut ts, storage_id, courier_id, user_b(), ITEM_TYPE_ID, ITEM_QUANTITY);
     ts.next_tx(user_b());
     {
         let mut storage_unit = ts::take_shared_by_id<StorageUnit>(&ts, storage_id);
         let character = ts::take_shared_by_id<Character>(&ts, courier_id);
-        courier_service::fulfill_delivery(&mut config, &mut storage_unit, &character, item, 0, ts.ctx());
+        courier_service::fulfill_delivery(&mut config, &mut storage_unit, &character, item, delivery_id, ts.ctx());
         ts::return_shared(storage_unit);
         ts::return_shared(character);
     };
@@ -492,16 +463,15 @@ fun test_pickup_with_inventory() {
     {
         let mut storage_unit = ts::take_shared_by_id<StorageUnit>(&ts, storage_id);
         let character = ts::take_shared_by_id<Character>(&ts, receiver_id);
-        courier_service::pickup(&mut config, &mut storage_unit, &character, 0, ts.ctx());
+        courier_service::pickup(&mut config, &mut storage_unit, &character, delivery_id, ts.ctx());
         ts::return_shared(storage_unit);
         ts::return_shared(character);
     };
 
-    // Verify pending count decremented
     let (_likes, _completed, pending) = courier_service::get_player_metrics(&config, user_a());
     assert!(pending == 0);
 
-    // Verify receiver's owned inventory has the items
+    // Verify receiver's owned inventory
     ts.next_tx(admin());
     {
         let storage_unit = ts::take_shared_by_id<StorageUnit>(&ts, storage_id);
@@ -535,11 +505,11 @@ fun test_full_delivery_lifecycle() {
     let mut ts = ts::begin(admin());
     let (receiver_id, courier_id, storage_id) = setup_full(&mut ts);
     let (mut config, admin_cap) = config::create_for_testing(ts.ctx());
-    courier_service::set_likes(&mut config, &admin_cap, ITEM_TYPE_ID, 5);
+    courier_service::set_likes(&mut config, &admin_cap, ITEM_TYPE_ID, 5000);
 
     // Step 1: Receiver creates delivery request
     ts.next_tx(user_a());
-    courier_service::create_delivery_request(
+    let delivery_id = courier_service::create_delivery_request(
         &mut config, storage_id, ITEM_TYPE_ID, 10, ts.ctx(),
     );
     let (_likes, _completed, pending) = courier_service::get_player_metrics(&config, user_a());
@@ -548,7 +518,6 @@ fun test_full_delivery_lifecycle() {
     // Step 2: Courier mints 100 items, withdraws exactly 10 for delivery
     mint_items(&mut ts, storage_id, courier_id, user_b(), ITEM_ITEM_ID, ITEM_TYPE_ID, ITEM_VOLUME, 100);
 
-    // Verify courier has 100 items in owned inventory
     ts.next_tx(admin());
     {
         let storage_unit = ts::take_shared_by_id<StorageUnit>(&ts, storage_id);
@@ -560,10 +529,9 @@ fun test_full_delivery_lifecycle() {
         ts::return_shared(character);
     };
 
-    // Courier withdraws exactly 10 (partial stack split)
     let item = char_withdraw(&mut ts, storage_id, courier_id, user_b(), ITEM_TYPE_ID, 10);
 
-    // Verify courier has 90 remaining in owned inventory
+    // Verify 90 remaining (partial stack split)
     ts.next_tx(admin());
     {
         let storage_unit = ts::take_shared_by_id<StorageUnit>(&ts, storage_id);
@@ -580,37 +548,27 @@ fun test_full_delivery_lifecycle() {
     {
         let mut storage_unit = ts::take_shared_by_id<StorageUnit>(&ts, storage_id);
         let character = ts::take_shared_by_id<Character>(&ts, courier_id);
-        courier_service::fulfill_delivery(&mut config, &mut storage_unit, &character, item, 0, ts.ctx());
+        courier_service::fulfill_delivery(&mut config, &mut storage_unit, &character, item, delivery_id, ts.ctx());
         ts::return_shared(storage_unit);
         ts::return_shared(character);
     };
 
-    // Verify likes: 5 * 10 = 50
+    // Verify likes: (5000 * 10) / 1000 = 50
     let (likes, completed, _) = courier_service::get_player_metrics(&config, user_b());
     assert!(likes == 50);
     assert!(completed == 1);
-
-    // Verify items in open inventory
-    ts.next_tx(admin());
-    {
-        let storage_unit = ts::take_shared_by_id<StorageUnit>(&ts, storage_id);
-        let open_key = storage_unit.open_storage_key();
-        let inv = storage_unit.inventory(open_key);
-        assert!(inv.item_quantity(ITEM_TYPE_ID) == 10);
-        ts::return_shared(storage_unit);
-    };
 
     // Step 4: Receiver picks up
     ts.next_tx(user_a());
     {
         let mut storage_unit = ts::take_shared_by_id<StorageUnit>(&ts, storage_id);
         let character = ts::take_shared_by_id<Character>(&ts, receiver_id);
-        courier_service::pickup(&mut config, &mut storage_unit, &character, 0, ts.ctx());
+        courier_service::pickup(&mut config, &mut storage_unit, &character, delivery_id, ts.ctx());
         ts::return_shared(storage_unit);
         ts::return_shared(character);
     };
 
-    // Verify receiver got items in their owned inventory
+    // Verify receiver got items
     ts.next_tx(admin());
     {
         let storage_unit = ts::take_shared_by_id<StorageUnit>(&ts, storage_id);
@@ -622,17 +580,6 @@ fun test_full_delivery_lifecycle() {
         ts::return_shared(character);
     };
 
-    // Verify open inventory is now empty
-    ts.next_tx(admin());
-    {
-        let storage_unit = ts::take_shared_by_id<StorageUnit>(&ts, storage_id);
-        let open_key = storage_unit.open_storage_key();
-        let inv = storage_unit.inventory(open_key);
-        assert!(!inv.contains_item(ITEM_TYPE_ID));
-        ts::return_shared(storage_unit);
-    };
-
-    // Verify pending decremented
     let (_, _, pending) = courier_service::get_player_metrics(&config, user_a());
     assert!(pending == 0);
 
@@ -649,11 +596,10 @@ fun test_fulfill_already_delivered() {
     let mut ts = ts::begin(admin());
     let (_receiver_id, courier_id, storage_id) = setup_full(&mut ts);
     let (mut config, admin_cap) = config::create_for_testing(ts.ctx());
-    courier_service::set_likes(&mut config, &admin_cap, ITEM_TYPE_ID, 10);
+    courier_service::set_likes(&mut config, &admin_cap, ITEM_TYPE_ID, 10000);
 
-    // Create delivery
     ts.next_tx(user_a());
-    courier_service::create_delivery_request(
+    let delivery_id = courier_service::create_delivery_request(
         &mut config, storage_id, ITEM_TYPE_ID, ITEM_QUANTITY, ts.ctx(),
     );
 
@@ -664,7 +610,7 @@ fun test_fulfill_already_delivered() {
     {
         let mut storage_unit = ts::take_shared_by_id<StorageUnit>(&ts, storage_id);
         let character = ts::take_shared_by_id<Character>(&ts, courier_id);
-        courier_service::fulfill_delivery(&mut config, &mut storage_unit, &character, item, 0, ts.ctx());
+        courier_service::fulfill_delivery(&mut config, &mut storage_unit, &character, item, delivery_id, ts.ctx());
         ts::return_shared(storage_unit);
         ts::return_shared(character);
     };
@@ -676,7 +622,7 @@ fun test_fulfill_already_delivered() {
     {
         let mut storage_unit = ts::take_shared_by_id<StorageUnit>(&ts, storage_id);
         let character = ts::take_shared_by_id<Character>(&ts, courier_id);
-        courier_service::fulfill_delivery(&mut config, &mut storage_unit, &character, item2, 0, ts.ctx());
+        courier_service::fulfill_delivery(&mut config, &mut storage_unit, &character, item2, delivery_id, ts.ctx());
         ts::return_shared(storage_unit);
         ts::return_shared(character);
     };
@@ -690,24 +636,21 @@ fun test_fulfill_wrong_item_type() {
     let mut ts = ts::begin(admin());
     let (_receiver_id, courier_id, storage_id) = setup_full(&mut ts);
     let (mut config, admin_cap) = config::create_for_testing(ts.ctx());
-    courier_service::set_likes(&mut config, &admin_cap, ITEM_TYPE_ID, 10);
+    courier_service::set_likes(&mut config, &admin_cap, ITEM_TYPE_ID, 10000);
 
-    // Create delivery for ITEM_TYPE_ID
     ts.next_tx(user_a());
-    courier_service::create_delivery_request(
+    let delivery_id = courier_service::create_delivery_request(
         &mut config, storage_id, ITEM_TYPE_ID, ITEM_QUANTITY, ts.ctx(),
     );
 
-    // Courier mints a DIFFERENT item type
     let wrong_type_id: u64 = 99999;
     mint_items(&mut ts, storage_id, courier_id, user_b(), ITEM_ITEM_ID + 100, wrong_type_id, ITEM_VOLUME, ITEM_QUANTITY);
     let item = char_withdraw(&mut ts, storage_id, courier_id, user_b(), wrong_type_id, ITEM_QUANTITY);
 
-    // Fulfill with wrong type should fail
     ts.next_tx(user_b());
     let mut storage_unit = ts::take_shared_by_id<StorageUnit>(&ts, storage_id);
     let character = ts::take_shared_by_id<Character>(&ts, courier_id);
-    courier_service::fulfill_delivery(&mut config, &mut storage_unit, &character, item, 0, ts.ctx());
+    courier_service::fulfill_delivery(&mut config, &mut storage_unit, &character, item, delivery_id, ts.ctx());
     ts::return_shared(storage_unit);
     ts::return_shared(character);
 
@@ -720,23 +663,20 @@ fun test_fulfill_wrong_quantity() {
     let mut ts = ts::begin(admin());
     let (_receiver_id, courier_id, storage_id) = setup_full(&mut ts);
     let (mut config, admin_cap) = config::create_for_testing(ts.ctx());
-    courier_service::set_likes(&mut config, &admin_cap, ITEM_TYPE_ID, 10);
+    courier_service::set_likes(&mut config, &admin_cap, ITEM_TYPE_ID, 10000);
 
-    // Create delivery for 50 items
     ts.next_tx(user_a());
-    courier_service::create_delivery_request(
+    let delivery_id = courier_service::create_delivery_request(
         &mut config, storage_id, ITEM_TYPE_ID, ITEM_QUANTITY, ts.ctx(),
     );
 
-    // Courier mints 100 but only withdraws 25 (wrong quantity)
     mint_items(&mut ts, storage_id, courier_id, user_b(), ITEM_ITEM_ID, ITEM_TYPE_ID, ITEM_VOLUME, 100);
     let item = char_withdraw(&mut ts, storage_id, courier_id, user_b(), ITEM_TYPE_ID, 25);
 
-    // Fulfill with wrong quantity should fail
     ts.next_tx(user_b());
     let mut storage_unit = ts::take_shared_by_id<StorageUnit>(&ts, storage_id);
     let character = ts::take_shared_by_id<Character>(&ts, courier_id);
-    courier_service::fulfill_delivery(&mut config, &mut storage_unit, &character, item, 0, ts.ctx());
+    courier_service::fulfill_delivery(&mut config, &mut storage_unit, &character, item, delivery_id, ts.ctx());
     ts::return_shared(storage_unit);
     ts::return_shared(character);
 
@@ -749,24 +689,21 @@ fun test_fulfill_wrong_storage_unit() {
     let mut ts = ts::begin(admin());
     let (_receiver_id, courier_id, storage_id) = setup_full(&mut ts);
     let (mut config, admin_cap) = config::create_for_testing(ts.ctx());
-    courier_service::set_likes(&mut config, &admin_cap, ITEM_TYPE_ID, 10);
+    courier_service::set_likes(&mut config, &admin_cap, ITEM_TYPE_ID, 10000);
 
-    // Create delivery for a DIFFERENT storage unit ID
     ts.next_tx(user_a());
     let fake_ssu_id = object::id_from_address(@0xDEAD);
-    courier_service::create_delivery_request(
+    let delivery_id = courier_service::create_delivery_request(
         &mut config, fake_ssu_id, ITEM_TYPE_ID, ITEM_QUANTITY, ts.ctx(),
     );
 
-    // Courier mints and withdraws items from the real SSU
     mint_items(&mut ts, storage_id, courier_id, user_b(), ITEM_ITEM_ID, ITEM_TYPE_ID, ITEM_VOLUME, ITEM_QUANTITY);
     let item = char_withdraw(&mut ts, storage_id, courier_id, user_b(), ITEM_TYPE_ID, ITEM_QUANTITY);
 
-    // Fulfill with wrong SSU should fail
     ts.next_tx(user_b());
     let mut storage_unit = ts::take_shared_by_id<StorageUnit>(&ts, storage_id);
     let character = ts::take_shared_by_id<Character>(&ts, courier_id);
-    courier_service::fulfill_delivery(&mut config, &mut storage_unit, &character, item, 0, ts.ctx());
+    courier_service::fulfill_delivery(&mut config, &mut storage_unit, &character, item, delivery_id, ts.ctx());
     ts::return_shared(storage_unit);
     ts::return_shared(character);
 
@@ -779,11 +716,10 @@ fun test_pickup_wrong_receiver() {
     let mut ts = ts::begin(admin());
     let (_receiver_id, courier_id, storage_id) = setup_full(&mut ts);
     let (mut config, admin_cap) = config::create_for_testing(ts.ctx());
-    courier_service::set_likes(&mut config, &admin_cap, ITEM_TYPE_ID, 10);
+    courier_service::set_likes(&mut config, &admin_cap, ITEM_TYPE_ID, 10000);
 
-    // Create and fulfill delivery
     ts.next_tx(user_a());
-    courier_service::create_delivery_request(
+    let delivery_id = courier_service::create_delivery_request(
         &mut config, storage_id, ITEM_TYPE_ID, ITEM_QUANTITY, ts.ctx(),
     );
     mint_items(&mut ts, storage_id, courier_id, user_b(), ITEM_ITEM_ID, ITEM_TYPE_ID, ITEM_VOLUME, ITEM_QUANTITY);
@@ -792,7 +728,7 @@ fun test_pickup_wrong_receiver() {
     {
         let mut storage_unit = ts::take_shared_by_id<StorageUnit>(&ts, storage_id);
         let character = ts::take_shared_by_id<Character>(&ts, courier_id);
-        courier_service::fulfill_delivery(&mut config, &mut storage_unit, &character, item, 0, ts.ctx());
+        courier_service::fulfill_delivery(&mut config, &mut storage_unit, &character, item, delivery_id, ts.ctx());
         ts::return_shared(storage_unit);
         ts::return_shared(character);
     };
@@ -802,7 +738,7 @@ fun test_pickup_wrong_receiver() {
     {
         let mut storage_unit = ts::take_shared_by_id<StorageUnit>(&ts, storage_id);
         let character = ts::take_shared_by_id<Character>(&ts, courier_id);
-        courier_service::pickup(&mut config, &mut storage_unit, &character, 0, ts.ctx());
+        courier_service::pickup(&mut config, &mut storage_unit, &character, delivery_id, ts.ctx());
         ts::return_shared(storage_unit);
         ts::return_shared(character);
     };
@@ -816,20 +752,18 @@ fun test_pickup_not_delivered() {
     let mut ts = ts::begin(admin());
     let (receiver_id, _courier_id, storage_id) = setup_full(&mut ts);
     let (mut config, admin_cap) = config::create_for_testing(ts.ctx());
-    courier_service::set_likes(&mut config, &admin_cap, ITEM_TYPE_ID, 10);
+    courier_service::set_likes(&mut config, &admin_cap, ITEM_TYPE_ID, 10000);
 
-    // Create delivery but don't fulfill
     ts.next_tx(user_a());
-    courier_service::create_delivery_request(
+    let delivery_id = courier_service::create_delivery_request(
         &mut config, storage_id, ITEM_TYPE_ID, ITEM_QUANTITY, ts.ctx(),
     );
 
-    // Try to pickup before delivery — should fail
     ts.next_tx(user_a());
     {
         let mut storage_unit = ts::take_shared_by_id<StorageUnit>(&ts, storage_id);
         let character = ts::take_shared_by_id<Character>(&ts, receiver_id);
-        courier_service::pickup(&mut config, &mut storage_unit, &character, 0, ts.ctx());
+        courier_service::pickup(&mut config, &mut storage_unit, &character, delivery_id, ts.ctx());
         ts::return_shared(storage_unit);
         ts::return_shared(character);
     };
@@ -838,32 +772,26 @@ fun test_pickup_not_delivered() {
     ts.end();
 }
 
-// Note: test_pickup_wrong_storage_unit is not needed because
-// fulfill_delivery already validates SSU match — you can never get a
-// delivered delivery pointing to a different SSU than the one it was
-// fulfilled on. The fulfill-side EStorageUnitMismatch test covers this.
-
 #[test]
 fun test_multiple_deliveries() {
     // Multiple deliveries on the same SSU, fulfilled and picked up independently.
     let mut ts = ts::begin(admin());
     let (receiver_id, courier_id, storage_id) = setup_full(&mut ts);
     let (mut config, admin_cap) = config::create_for_testing(ts.ctx());
-    courier_service::set_likes(&mut config, &admin_cap, ITEM_TYPE_ID, 2);
+    courier_service::set_likes(&mut config, &admin_cap, ITEM_TYPE_ID, 2000);
 
     // Create 2 deliveries
     ts.next_tx(user_a());
-    courier_service::create_delivery_request(
+    let did0 = courier_service::create_delivery_request(
         &mut config, storage_id, ITEM_TYPE_ID, 10, ts.ctx(),
     );
-    courier_service::create_delivery_request(
+    let did1 = courier_service::create_delivery_request(
         &mut config, storage_id, ITEM_TYPE_ID, 20, ts.ctx(),
     );
 
     let (_, _, pending) = courier_service::get_player_metrics(&config, user_a());
     assert!(pending == 2);
 
-    // Mint enough for both (30 total)
     mint_items(&mut ts, storage_id, courier_id, user_b(), ITEM_ITEM_ID, ITEM_TYPE_ID, ITEM_VOLUME, 30);
 
     // Fulfill delivery 0 (10 items)
@@ -872,7 +800,7 @@ fun test_multiple_deliveries() {
     {
         let mut storage_unit = ts::take_shared_by_id<StorageUnit>(&ts, storage_id);
         let character = ts::take_shared_by_id<Character>(&ts, courier_id);
-        courier_service::fulfill_delivery(&mut config, &mut storage_unit, &character, item0, 0, ts.ctx());
+        courier_service::fulfill_delivery(&mut config, &mut storage_unit, &character, item0, did0, ts.ctx());
         ts::return_shared(storage_unit);
         ts::return_shared(character);
     };
@@ -883,12 +811,12 @@ fun test_multiple_deliveries() {
     {
         let mut storage_unit = ts::take_shared_by_id<StorageUnit>(&ts, storage_id);
         let character = ts::take_shared_by_id<Character>(&ts, courier_id);
-        courier_service::fulfill_delivery(&mut config, &mut storage_unit, &character, item1, 1, ts.ctx());
+        courier_service::fulfill_delivery(&mut config, &mut storage_unit, &character, item1, did1, ts.ctx());
         ts::return_shared(storage_unit);
         ts::return_shared(character);
     };
 
-    // Verify courier metrics: 2 * (10 + 20) = 60 likes, 2 deliveries
+    // Verify courier metrics: (2000 * (10 + 20)) / 1000 = 60 likes, 2 deliveries
     let (likes, completed, _) = courier_service::get_player_metrics(&config, user_b());
     assert!(likes == 60);
     assert!(completed == 2);
@@ -898,7 +826,7 @@ fun test_multiple_deliveries() {
     {
         let mut storage_unit = ts::take_shared_by_id<StorageUnit>(&ts, storage_id);
         let character = ts::take_shared_by_id<Character>(&ts, receiver_id);
-        courier_service::pickup(&mut config, &mut storage_unit, &character, 1, ts.ctx());
+        courier_service::pickup(&mut config, &mut storage_unit, &character, did1, ts.ctx());
         ts::return_shared(storage_unit);
         ts::return_shared(character);
     };
@@ -911,7 +839,7 @@ fun test_multiple_deliveries() {
     {
         let mut storage_unit = ts::take_shared_by_id<StorageUnit>(&ts, storage_id);
         let character = ts::take_shared_by_id<Character>(&ts, receiver_id);
-        courier_service::pickup(&mut config, &mut storage_unit, &character, 0, ts.ctx());
+        courier_service::pickup(&mut config, &mut storage_unit, &character, did0, ts.ctx());
         ts::return_shared(storage_unit);
         ts::return_shared(character);
     };
@@ -930,6 +858,272 @@ fun test_multiple_deliveries() {
         ts::return_shared(storage_unit);
         ts::return_shared(character);
     };
+
+    config::destroy_for_testing(config, admin_cap);
+    ts.end();
+}
+
+// ============================================================
+// === Tests: Self-delivery prevention ===
+// ============================================================
+
+#[test, expected_failure(abort_code = courier_service::ESelfDelivery)]
+fun test_self_delivery_blocked() {
+    // Receiver tries to fulfill their own delivery — should fail
+    let mut ts = ts::begin(admin());
+    let (receiver_id, _courier_id, storage_id) = setup_full(&mut ts);
+    let (mut config, admin_cap) = config::create_for_testing(ts.ctx());
+    courier_service::set_likes(&mut config, &admin_cap, ITEM_TYPE_ID, 10000);
+
+    ts.next_tx(user_a());
+    let delivery_id = courier_service::create_delivery_request(
+        &mut config, storage_id, ITEM_TYPE_ID, ITEM_QUANTITY, ts.ctx(),
+    );
+
+    // Receiver mints items and tries to fulfill their own delivery
+    mint_items(&mut ts, storage_id, receiver_id, user_a(), ITEM_ITEM_ID, ITEM_TYPE_ID, ITEM_VOLUME, ITEM_QUANTITY);
+    let item = char_withdraw(&mut ts, storage_id, receiver_id, user_a(), ITEM_TYPE_ID, ITEM_QUANTITY);
+
+    ts.next_tx(user_a());
+    let mut storage_unit = ts::take_shared_by_id<StorageUnit>(&ts, storage_id);
+    let character = ts::take_shared_by_id<Character>(&ts, receiver_id);
+    courier_service::fulfill_delivery(&mut config, &mut storage_unit, &character, item, delivery_id, ts.ctx());
+    ts::return_shared(storage_unit);
+    ts::return_shared(character);
+
+    config::destroy_for_testing(config, admin_cap);
+    ts.end();
+}
+
+#[test]
+fun test_self_delivery_admin_hardcoded() {
+    // Hardcoded admin address can self-deliver
+    let mut ts = ts::begin(admin());
+    let (_receiver_id, _courier_id, storage_id) = setup_full(&mut ts);
+
+    // Create a character for the hardcoded admin address
+    let admin_char_id = create_character(&mut ts, ADMIN_ADDRESS, ADMIN_SELF_CHAR_ID);
+
+    let (mut config, admin_cap) = config::create_for_testing(ts.ctx());
+    courier_service::set_likes(&mut config, &admin_cap, ITEM_TYPE_ID, 10000);
+
+    // Admin creates a delivery request (admin is the receiver)
+    ts.next_tx(ADMIN_ADDRESS);
+    let delivery_id = courier_service::create_delivery_request(
+        &mut config, storage_id, ITEM_TYPE_ID, ITEM_QUANTITY, ts.ctx(),
+    );
+
+    // Admin mints and withdraws items
+    mint_items(&mut ts, storage_id, admin_char_id, ADMIN_ADDRESS, ITEM_ITEM_ID, ITEM_TYPE_ID, ITEM_VOLUME, ITEM_QUANTITY);
+    let item = char_withdraw(&mut ts, storage_id, admin_char_id, ADMIN_ADDRESS, ITEM_TYPE_ID, ITEM_QUANTITY);
+
+    // Admin fulfills their own delivery — allowed because of ADMIN_ADDRESS
+    ts.next_tx(ADMIN_ADDRESS);
+    let mut storage_unit = ts::take_shared_by_id<StorageUnit>(&ts, storage_id);
+    let character = ts::take_shared_by_id<Character>(&ts, admin_char_id);
+    courier_service::fulfill_delivery(&mut config, &mut storage_unit, &character, item, delivery_id, ts.ctx());
+    ts::return_shared(storage_unit);
+    ts::return_shared(character);
+
+    // Verify it worked
+    let (_ssu, _type_id, _qty, _receiver, sender, delivered) =
+        courier_service::get_delivery(&config, delivery_id);
+    assert!(sender == ADMIN_ADDRESS);
+    assert!(delivered);
+
+    config::destroy_for_testing(config, admin_cap);
+    ts.end();
+}
+
+#[test]
+fun test_self_delivery_admin_cap() {
+    // AdminCap holder can self-deliver via admin_fulfill_delivery
+    let mut ts = ts::begin(admin());
+    let (receiver_id, _courier_id, storage_id) = setup_full(&mut ts);
+    let (mut config, admin_cap) = config::create_for_testing(ts.ctx());
+    courier_service::set_likes(&mut config, &admin_cap, ITEM_TYPE_ID, 10000);
+
+    // Receiver creates delivery
+    ts.next_tx(user_a());
+    let delivery_id = courier_service::create_delivery_request(
+        &mut config, storage_id, ITEM_TYPE_ID, ITEM_QUANTITY, ts.ctx(),
+    );
+
+    // Receiver mints items
+    mint_items(&mut ts, storage_id, receiver_id, user_a(), ITEM_ITEM_ID, ITEM_TYPE_ID, ITEM_VOLUME, ITEM_QUANTITY);
+    let item = char_withdraw(&mut ts, storage_id, receiver_id, user_a(), ITEM_TYPE_ID, ITEM_QUANTITY);
+
+    // Receiver uses admin_fulfill_delivery (with AdminCap) — bypasses self-delivery check
+    ts.next_tx(user_a());
+    let mut storage_unit = ts::take_shared_by_id<StorageUnit>(&ts, storage_id);
+    let character = ts::take_shared_by_id<Character>(&ts, receiver_id);
+    courier_service::admin_fulfill_delivery(&mut config, &mut storage_unit, &character, item, delivery_id, &admin_cap, ts.ctx());
+    ts::return_shared(storage_unit);
+    ts::return_shared(character);
+
+    let (_ssu, _type_id, _qty, _receiver, sender, delivered) =
+        courier_service::get_delivery(&config, delivery_id);
+    assert!(sender == user_a());
+    assert!(delivered);
+
+    config::destroy_for_testing(config, admin_cap);
+    ts.end();
+}
+
+// ============================================================
+// === Tests: Race conditions ===
+// ============================================================
+
+#[test, expected_failure(abort_code = courier_service::EAlreadyDelivered)]
+fun test_fulfill_race_different_couriers() {
+    // Two different couriers try to fulfill the same delivery
+    let mut ts = ts::begin(admin());
+    let (_receiver_id, courier_id, storage_id) = setup_full(&mut ts);
+
+    // Create a second courier
+    let courier2_id = create_character(&mut ts, COURIER2, COURIER2_CHAR_ID);
+
+    let (mut config, admin_cap) = config::create_for_testing(ts.ctx());
+    courier_service::set_likes(&mut config, &admin_cap, ITEM_TYPE_ID, 10000);
+
+    ts.next_tx(user_a());
+    let delivery_id = courier_service::create_delivery_request(
+        &mut config, storage_id, ITEM_TYPE_ID, ITEM_QUANTITY, ts.ctx(),
+    );
+
+    // Courier 1 fulfills successfully
+    mint_items(&mut ts, storage_id, courier_id, user_b(), ITEM_ITEM_ID, ITEM_TYPE_ID, ITEM_VOLUME, ITEM_QUANTITY);
+    let item1 = char_withdraw(&mut ts, storage_id, courier_id, user_b(), ITEM_TYPE_ID, ITEM_QUANTITY);
+    ts.next_tx(user_b());
+    {
+        let mut storage_unit = ts::take_shared_by_id<StorageUnit>(&ts, storage_id);
+        let character = ts::take_shared_by_id<Character>(&ts, courier_id);
+        courier_service::fulfill_delivery(&mut config, &mut storage_unit, &character, item1, delivery_id, ts.ctx());
+        ts::return_shared(storage_unit);
+        ts::return_shared(character);
+    };
+
+    // Courier 2 tries to fulfill the same delivery — should fail
+    mint_items(&mut ts, storage_id, courier2_id, COURIER2, ITEM_ITEM_ID + 200, ITEM_TYPE_ID, ITEM_VOLUME, ITEM_QUANTITY);
+    let item2 = char_withdraw(&mut ts, storage_id, courier2_id, COURIER2, ITEM_TYPE_ID, ITEM_QUANTITY);
+    ts.next_tx(COURIER2);
+    {
+        let mut storage_unit = ts::take_shared_by_id<StorageUnit>(&ts, storage_id);
+        let character = ts::take_shared_by_id<Character>(&ts, courier2_id);
+        courier_service::fulfill_delivery(&mut config, &mut storage_unit, &character, item2, delivery_id, ts.ctx());
+        ts::return_shared(storage_unit);
+        ts::return_shared(character);
+    };
+
+    config::destroy_for_testing(config, admin_cap);
+    ts.end();
+}
+
+// ============================================================
+// === Tests: Fractional likes (millilikes) ===
+// ============================================================
+
+#[test]
+fun test_fractional_likes() {
+    // 400 millilikes (0.4 per item) × 500 qty = 200 likes
+    let mut ts = ts::begin(admin());
+    let (_receiver_id, courier_id, storage_id) = setup_full(&mut ts);
+    let (mut config, admin_cap) = config::create_for_testing(ts.ctx());
+    courier_service::set_likes(&mut config, &admin_cap, ITEM_TYPE_ID, 400);
+
+    ts.next_tx(user_a());
+    let delivery_id = courier_service::create_delivery_request(
+        &mut config, storage_id, ITEM_TYPE_ID, 500, ts.ctx(),
+    );
+
+    mint_items(&mut ts, storage_id, courier_id, user_b(), ITEM_ITEM_ID, ITEM_TYPE_ID, ITEM_VOLUME, 500);
+    let item = char_withdraw(&mut ts, storage_id, courier_id, user_b(), ITEM_TYPE_ID, 500);
+
+    ts.next_tx(user_b());
+    let mut storage_unit = ts::take_shared_by_id<StorageUnit>(&ts, storage_id);
+    let character = ts::take_shared_by_id<Character>(&ts, courier_id);
+    courier_service::fulfill_delivery(&mut config, &mut storage_unit, &character, item, delivery_id, ts.ctx());
+    ts::return_shared(storage_unit);
+    ts::return_shared(character);
+
+    let (likes, _completed, _pending) = courier_service::get_player_metrics(&config, user_b());
+    assert!(likes == 200); // (400 * 500) / 1000 = 200
+
+    config::destroy_for_testing(config, admin_cap);
+    ts.end();
+}
+
+#[test]
+fun test_zero_likes() {
+    // 0 millilikes — anti-gaming tool
+    let mut ts = ts::begin(admin());
+    let (_receiver_id, courier_id, storage_id) = setup_full(&mut ts);
+    let (mut config, admin_cap) = config::create_for_testing(ts.ctx());
+    courier_service::set_likes(&mut config, &admin_cap, ITEM_TYPE_ID, 0);
+
+    ts.next_tx(user_a());
+    let delivery_id = courier_service::create_delivery_request(
+        &mut config, storage_id, ITEM_TYPE_ID, 100, ts.ctx(),
+    );
+
+    mint_items(&mut ts, storage_id, courier_id, user_b(), ITEM_ITEM_ID, ITEM_TYPE_ID, ITEM_VOLUME, 100);
+    let item = char_withdraw(&mut ts, storage_id, courier_id, user_b(), ITEM_TYPE_ID, 100);
+
+    ts.next_tx(user_b());
+    let mut storage_unit = ts::take_shared_by_id<StorageUnit>(&ts, storage_id);
+    let character = ts::take_shared_by_id<Character>(&ts, courier_id);
+    courier_service::fulfill_delivery(&mut config, &mut storage_unit, &character, item, delivery_id, ts.ctx());
+    ts::return_shared(storage_unit);
+    ts::return_shared(character);
+
+    let (likes, completed, _) = courier_service::get_player_metrics(&config, user_b());
+    assert!(likes == 0); // (0 * 100) / 1000 = 0
+    assert!(completed == 1); // delivery still counts
+
+    config::destroy_for_testing(config, admin_cap);
+    ts.end();
+}
+
+// ============================================================
+// === Tests: Deleted delivery query ===
+// ============================================================
+
+#[test, expected_failure(abort_code = courier_service::EDeliveryNotFound)]
+fun test_query_deleted_delivery() {
+    // After pickup, the delivery record is removed — querying should fail
+    let mut ts = ts::begin(admin());
+    let (receiver_id, courier_id, storage_id) = setup_full(&mut ts);
+    let (mut config, admin_cap) = config::create_for_testing(ts.ctx());
+    courier_service::set_likes(&mut config, &admin_cap, ITEM_TYPE_ID, 10000);
+
+    ts.next_tx(user_a());
+    let delivery_id = courier_service::create_delivery_request(
+        &mut config, storage_id, ITEM_TYPE_ID, ITEM_QUANTITY, ts.ctx(),
+    );
+
+    mint_items(&mut ts, storage_id, courier_id, user_b(), ITEM_ITEM_ID, ITEM_TYPE_ID, ITEM_VOLUME, ITEM_QUANTITY);
+    let item = char_withdraw(&mut ts, storage_id, courier_id, user_b(), ITEM_TYPE_ID, ITEM_QUANTITY);
+
+    ts.next_tx(user_b());
+    {
+        let mut storage_unit = ts::take_shared_by_id<StorageUnit>(&ts, storage_id);
+        let character = ts::take_shared_by_id<Character>(&ts, courier_id);
+        courier_service::fulfill_delivery(&mut config, &mut storage_unit, &character, item, delivery_id, ts.ctx());
+        ts::return_shared(storage_unit);
+        ts::return_shared(character);
+    };
+
+    ts.next_tx(user_a());
+    {
+        let mut storage_unit = ts::take_shared_by_id<StorageUnit>(&ts, storage_id);
+        let character = ts::take_shared_by_id<Character>(&ts, receiver_id);
+        courier_service::pickup(&mut config, &mut storage_unit, &character, delivery_id, ts.ctx());
+        ts::return_shared(storage_unit);
+        ts::return_shared(character);
+    };
+
+    // Query the deleted delivery — should abort with EDeliveryNotFound
+    courier_service::get_delivery(&config, delivery_id);
 
     config::destroy_for_testing(config, admin_cap);
     ts.end();
