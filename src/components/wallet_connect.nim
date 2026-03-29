@@ -100,24 +100,14 @@ proc renderDev(self: WalletConnect) =
       )
 
 proc renderProdConnected(self: WalletConnect) =
-  ## Render connected state in production mode.
+  ## Render connected state in production mode — just show the address.
   var shortAddr: cstring
   {.emit: "`shortAddr` = `connectedAddress`.slice(0, 6) + '...' + `connectedAddress`.slice(-4);".}
   self.innerHTML = cstring(
     "<div class=\"wallet-connected\">" &
     "<span class=\"wallet-address\">" & $shortAddr & "</span>" &
-    "<button class=\"btn btn-sm\" id=\"wallet-disconnect\">Disconnect</button>" &
     "</div>"
   )
-  let btn = self.querySelector("#wallet-disconnect")
-  if not btn.isNil:
-    btn.addEventListener("click", proc(e: Event) =
-      connectedClient = nil
-      connectedWallet = nil
-      connectedAccount = nil
-      connectedAddress = nil
-      self.render()
-    )
 
 proc renderProdWalletFound(self: WalletConnect, wallet: WalletStandard) =
   ## Render the connect button once EVE Vault is found.
