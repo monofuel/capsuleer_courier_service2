@@ -2,12 +2,15 @@
 ///
 /// Players request item deliveries to Smart Storage Units.
 /// Couriers fulfill requests and earn "likes" (reputation).
-/// Flow: Request → Fulfill → Pickup → Done.
+/// Flow: Request → Fulfill (deposit to open inventory) → Pickup (open → owned) → Done.
 module capsuleer_courier_service::courier_service;
 
 use sui::dynamic_field as df;
 use sui::event;
-use capsuleer_courier_service::config::{ExtensionConfig, AdminCap};
+use capsuleer_courier_service::config::{Self, ExtensionConfig, AdminCap, CourierAuth};
+use world::storage_unit::StorageUnit;
+use world::character::Character;
+use world::inventory::Item;
 
 // === Error codes ===
 
@@ -28,6 +31,12 @@ const ENotDelivered: vector<u8> = b"Delivery has not been fulfilled yet";
 
 #[error]
 const ENotReceiver: vector<u8> = b"Only the receiver can pickup this delivery";
+
+#[error]
+const EItemMismatch: vector<u8> = b"Item type or quantity does not match delivery request";
+
+#[error]
+const EStorageUnitMismatch: vector<u8> = b"Storage unit does not match delivery request";
 
 // === Data structures (stored as dynamic fields on ExtensionConfig) ===
 
@@ -131,9 +140,17 @@ public fun create_delivery_request(
 }
 
 /// Fulfill a delivery request. Caller becomes the sender (courier).
-/// Awards likes to the courier based on item type and quantity.
+/// The courier must provide the correct Item (matching type and quantity).
+/// The item is deposited into the SSU's open inventory for the receiver to pick up.
+///
+/// Typical PTB flow:
+///   1. Courier calls `withdraw_by_owner` to get an Item from their owned inventory
+///   2. Courier calls `fulfill_delivery` with that Item
 public fun fulfill_delivery(
     config: &mut ExtensionConfig,
+    storage_unit: &mut StorageUnit,
+    character: &Character,
+    item: Item,
     delivery_id: u64,
     ctx: &mut TxContext,
 ) {
@@ -142,6 +159,26 @@ public fun fulfill_delivery(
 
     let delivery: &mut Delivery = df::borrow_mut(config.uid_mut(), key);
     assert!(!delivery.delivered, EAlreadyDelivered);
+
+    // Validate item matches the delivery request
+    assert!(
+        item.type_id() == delivery.type_id && item.quantity() == delivery.quantity,
+        EItemMismatch,
+    );
+
+    // Validate storage unit matches
+    assert!(
+        object::id(storage_unit) == delivery.storage_unit_id,
+        EStorageUnitMismatch,
+    );
+
+    // Deposit item to open inventory (extension-controlled escrow)
+    storage_unit.deposit_to_open_inventory<CourierAuth>(
+        character,
+        item,
+        config::courier_auth(),
+        ctx,
+    );
 
     // Mark as delivered
     let courier = ctx.sender();
@@ -171,8 +208,12 @@ public fun fulfill_delivery(
 }
 
 /// Pickup a delivered item. Only the original receiver can call this.
+/// Withdraws the item from the SSU's open inventory and deposits it into
+/// the receiver's owned inventory on the same SSU.
 public fun pickup(
     config: &mut ExtensionConfig,
+    storage_unit: &mut StorageUnit,
+    receiver_character: &Character,
     delivery_id: u64,
     ctx: &mut TxContext,
 ) {
@@ -182,6 +223,32 @@ public fun pickup(
     let delivery: &Delivery = df::borrow(config.uid(), key);
     assert!(delivery.delivered, ENotDelivered);
     assert!(delivery.receiver == ctx.sender(), ENotReceiver);
+
+    // Validate storage unit matches
+    assert!(
+        object::id(storage_unit) == delivery.storage_unit_id,
+        EStorageUnitMismatch,
+    );
+
+    let type_id = delivery.type_id;
+    let quantity = delivery.quantity;
+
+    // Withdraw from open inventory
+    let item = storage_unit.withdraw_from_open_inventory<CourierAuth>(
+        receiver_character,
+        config::courier_auth(),
+        type_id,
+        quantity,
+        ctx,
+    );
+
+    // Deposit to receiver's owned inventory
+    storage_unit.deposit_to_owned<CourierAuth>(
+        receiver_character,
+        item,
+        config::courier_auth(),
+        ctx,
+    );
 
     // Decrement receiver's pending count
     let receiver = delivery.receiver;
