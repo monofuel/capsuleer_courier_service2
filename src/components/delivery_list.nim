@@ -24,6 +24,7 @@ proc connectedCallback(self: DeliveryList) =
   let rpcUrl = config.rpcUrl
   let cfgId = configId
   let pkgId = packageId
+  let currentSsu = ssuId
 
   proc load() {.async.} =
     let deliveries = await queryDeliveries(rpcUrl, pkgId)
@@ -31,6 +32,7 @@ proc connectedCallback(self: DeliveryList) =
     {.emit: """
     var _dlData = `deliveries`;
     var connAddr = window._courierAddress || '';
+    var curSsu = `currentSsu` || '';
 
     function _dlAddr(a) {
       if (!a) return '';
@@ -49,6 +51,10 @@ proc connectedCallback(self: DeliveryList) =
       return typeId;
     }
 
+    function _ssuClass(ssuId) {
+      return (curSsu && ssuId === curSsu) ? ' class="same-ssu"' : '';
+    }
+
     // Split deliveries into 3 buckets.
     var pickup = [], pending = [], available = [];
     for (var i = 0; i < _dlData.length; i++) {
@@ -62,6 +68,10 @@ proc connectedCallback(self: DeliveryList) =
 
     var html = '';
 
+    // --- Current SSU info ---
+    var ssuDisplay = curSsu ? _dlAddr(curSsu) : 'No SSU selected';
+    html += '<div class="panel"><p style="font-size:11px;color:var(--text-muted)">Current SSU: <span style="color:var(--text-primary)">' + ssuDisplay + '</span></p></div>';
+
     // --- Section 1: Ready for Pickup ---
     html += '<div class="panel"><div class="panel-header"><h3>Ready for Pickup</h3>' +
       '<button class="btn btn-sm" id="refresh-deliveries">Refresh</button></div>';
@@ -69,15 +79,16 @@ proc connectedCallback(self: DeliveryList) =
       html += '<p class="empty-row">No deliveries awaiting pickup</p>';
     } else {
       html += '<table class="delivery-table"><thead><tr>' +
-        '<th>ID</th><th>Type</th><th>Qty</th><th>Courier</th><th></th>' +
+        '<th>ID</th><th>SSU</th><th>Type</th><th>Qty</th><th>Courier</th><th></th>' +
         '</tr></thead><tbody>';
       for (var i = 0; i < pickup.length; i++) {
         var d = pickup[i];
-        html += '<tr><td>' + d.deliveryId + '</td>' +
+        html += '<tr' + _ssuClass(d.storageUnitId) + '><td>' + d.deliveryId + '</td>' +
+          '<td>' + _dlAddr(d.storageUnitId) + '</td>' +
           '<td>' + _dlTypeName(d.typeId) + '</td>' +
           '<td>' + d.quantity + '</td>' +
           '<td>' + _dlAddr(d.courier) + '</td>' +
-          '<td><button class="btn btn-sm" data-action="pickup" data-id="' + d.deliveryId + '">Pick up</button></td></tr>';
+          '<td><button class="btn btn-sm btn-pickup" data-action="pickup" data-id="' + d.deliveryId + '">Pick up</button></td></tr>';
       }
       html += '</tbody></table>';
     }
@@ -89,11 +100,12 @@ proc connectedCallback(self: DeliveryList) =
       html += '<p class="empty-row">No pending orders</p>';
     } else {
       html += '<table class="delivery-table"><thead><tr>' +
-        '<th>ID</th><th>Type</th><th>Qty</th><th>Status</th>' +
+        '<th>ID</th><th>SSU</th><th>Type</th><th>Qty</th><th>Status</th>' +
         '</tr></thead><tbody>';
       for (var i = 0; i < pending.length; i++) {
         var d = pending[i];
-        html += '<tr><td>' + d.deliveryId + '</td>' +
+        html += '<tr' + _ssuClass(d.storageUnitId) + '><td>' + d.deliveryId + '</td>' +
+          '<td>' + _dlAddr(d.storageUnitId) + '</td>' +
           '<td>' + _dlTypeName(d.typeId) + '</td>' +
           '<td>' + d.quantity + '</td>' +
           '<td><span class="status-pending">Pending</span></td></tr>';
@@ -108,11 +120,12 @@ proc connectedCallback(self: DeliveryList) =
       html += '<p class="empty-row">No deliveries available</p>';
     } else {
       html += '<table class="delivery-table"><thead><tr>' +
-        '<th>ID</th><th>Type</th><th>Qty</th><th>Receiver</th><th></th>' +
+        '<th>ID</th><th>SSU</th><th>Type</th><th>Qty</th><th>Receiver</th><th></th>' +
         '</tr></thead><tbody>';
       for (var i = 0; i < available.length; i++) {
         var d = available[i];
-        html += '<tr><td>' + d.deliveryId + '</td>' +
+        html += '<tr' + _ssuClass(d.storageUnitId) + '><td>' + d.deliveryId + '</td>' +
+          '<td>' + _dlAddr(d.storageUnitId) + '</td>' +
           '<td>' + _dlTypeName(d.typeId) + '</td>' +
           '<td>' + d.quantity + '</td>' +
           '<td>' + _dlAddr(d.receiver) + '</td>' +

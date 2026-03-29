@@ -388,6 +388,20 @@ input::placeholder {
   background: var(--accent-20);
 }
 
+.same-ssu td {
+  background: var(--accent-20);
+}
+
+.btn-pickup {
+  background: var(--success);
+  color: #000000;
+}
+
+.btn-pickup:hover {
+  background: #7aedb5;
+  color: #000000;
+}
+
 /* --- Debug Console (Quake-style) --- */
 
 debug-console {
