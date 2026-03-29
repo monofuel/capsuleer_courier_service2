@@ -13,7 +13,7 @@ type AppShell* = ref object of WebComponent
 proc renderConfigBar(self: AppShell) =
   ## Render the config bar — full controls in dev, minimal in production.
   if isProduction:
-    # Production: just show the environment label.
+    # Production: show environment label and debug URL params.
     let configBar = self.querySelector(".config-bar")
     if not configBar.isNil:
       configBar.innerHTML = cstring(

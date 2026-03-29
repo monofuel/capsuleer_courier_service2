@@ -15,6 +15,7 @@ var
   worldPackageId*: cstring = nil
   activeEnvironment*: cstring = "devnet"
   isProduction*: bool = false
+  ssuId*: cstring = nil
 
 proc applyConfig(cfg: cstring) =
   ## Apply a config object to global variables.
@@ -52,6 +53,7 @@ proc detectEnvironment*() =
   {.emit: """
   var params = new URLSearchParams(window.location.search);
   `tenant` = params.get('tenant') || '';
+  `ssuId` = params.get('ssu') || null;
   """.}
   if tenant == "stillness":
     isProduction = true

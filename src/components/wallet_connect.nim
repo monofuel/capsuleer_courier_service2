@@ -152,12 +152,9 @@ proc renderProd(self: WalletConnect) =
   if connectedAddress != nil:
     self.renderProdConnected()
   else:
-    var sdkKeys: cstring
-    {.emit: "`sdkKeys` = window.SuiSDK ? Object.keys(window.SuiSDK).join(', ') : 'no SuiSDK';".}
     self.innerHTML = cstring(
       "<div class=\"wallet-form\">" &
-      "<p>Detecting EVE Vault...</p>" &
-      "<p style=\"font-size:0.7em;color:#888\">SDK: " & $sdkKeys & "</p>" &
+      "<p>Connecting...</p>" &
       "</div>"
     )
     waitForEveVault(proc(wallet: WalletStandard) =
