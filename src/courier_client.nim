@@ -440,6 +440,20 @@ proc buildPickup*(configId, packageId, ssuId, characterId: cstring,
   ])
   result = tx
 
+proc buildOwnerPickup*(configId, packageId, ssuId, characterId: cstring,
+                       deliveryId: cstring): Transaction =
+  ## Build an owner pickup transaction. Deposits to ephemeral inventory
+  ## instead of per-Character owned inventory (workaround for EVE Frontier bug).
+  let tx = newTransaction()
+  let target = cstring($packageId & "::" & CourierModule & "::owner_pickup")
+  tx.moveCall(target, [
+    tx.txObject(configId),
+    tx.txObject(ssuId),
+    tx.txObject(characterId),
+    tx.txPureU64(deliveryId),
+  ])
+  result = tx
+
 # --- Event queries ---
 
 proc queryDeliveries*(rpcUrl, packageId: cstring): Future[seq[DeliveryInfo]] {.async.} =

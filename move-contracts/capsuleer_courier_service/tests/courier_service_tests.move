@@ -1103,6 +1103,100 @@ fun test_owner_fulfill_delivery_already_delivered() {
 }
 
 // ============================================================
+// === Tests: Owner pickup (ephemeral inventory) ===
+// ============================================================
+
+#[test]
+fun test_owner_pickup() {
+    // SSU owner picks up delivered items into ephemeral inventory (not Character-owned).
+    // Setup: SSU owned by receiver (user_a), courier is user_b.
+    let mut ts = ts::begin(admin());
+    setup_world(&mut ts);
+    let receiver_id = create_character(&mut ts, user_a(), RECEIVER_CHAR_ID);
+    let courier_id = create_character(&mut ts, user_b(), COURIER_CHAR_ID);
+    // SSU owned by receiver (user_a)
+    let (storage_id, nwn_id) = create_storage_unit(&mut ts, receiver_id);
+    online_storage_unit(&mut ts, user_a(), receiver_id, storage_id, nwn_id);
+
+    let (mut config, admin_cap) = config::create_for_testing(ts.ctx());
+    courier_service::set_likes(&mut config, &admin_cap, ITEM_TYPE_ID, 10000);
+
+    // Receiver creates delivery
+    ts.next_tx(user_a());
+    let delivery_id = courier_service::create_delivery_request(
+        &mut config, storage_id, ITEM_TYPE_ID, ITEM_QUANTITY, ts.ctx(),
+    );
+
+    // Mint items to courier's owned inventory on the SSU, then withdraw+fulfill
+    mint_items(&mut ts, storage_id, courier_id, user_b(),
+        ITEM_ITEM_ID, ITEM_TYPE_ID, ITEM_VOLUME, ITEM_QUANTITY);
+    let item = char_withdraw(&mut ts, storage_id, courier_id, user_b(), ITEM_TYPE_ID, ITEM_QUANTITY);
+    ts.next_tx(user_b());
+    {
+        let mut storage_unit = ts::take_shared_by_id<StorageUnit>(&ts, storage_id);
+        let character = ts::take_shared_by_id<Character>(&ts, courier_id);
+        courier_service::fulfill_delivery(
+            &mut config, &mut storage_unit, &character, item, delivery_id, ts.ctx(),
+        );
+        ts::return_shared(storage_unit);
+        ts::return_shared(character);
+    };
+
+    // Get initial ephemeral inventory count
+    let initial_ephemeral_qty;
+    ts.next_tx(admin());
+    {
+        let storage_unit = ts::take_shared_by_id<StorageUnit>(&ts, storage_id);
+        let inv = storage_unit.inventory(storage_unit.owner_cap_id());
+        initial_ephemeral_qty = if (inv.contains_item(ITEM_TYPE_ID)) {
+            inv.item_quantity(ITEM_TYPE_ID)
+        } else {
+            0
+        };
+        ts::return_shared(storage_unit);
+    };
+
+    // Receiver picks up using owner_pickup
+    ts.next_tx(user_a());
+    {
+        let mut storage_unit = ts::take_shared_by_id<StorageUnit>(&ts, storage_id);
+        let character = ts::take_shared_by_id<Character>(&ts, receiver_id);
+        courier_service::owner_pickup(
+            &mut config, &mut storage_unit, &character, delivery_id, ts.ctx(),
+        );
+        ts::return_shared(storage_unit);
+        ts::return_shared(character);
+    };
+
+    // Verify items are in ephemeral inventory (keyed by storage_unit.owner_cap_id)
+    ts.next_tx(admin());
+    {
+        let storage_unit = ts::take_shared_by_id<StorageUnit>(&ts, storage_id);
+        let inv = storage_unit.inventory(storage_unit.owner_cap_id());
+        assert!(inv.contains_item(ITEM_TYPE_ID));
+        assert!(inv.item_quantity(ITEM_TYPE_ID) == initial_ephemeral_qty + ITEM_QUANTITY);
+        ts::return_shared(storage_unit);
+    };
+
+    // Verify open inventory is empty
+    ts.next_tx(admin());
+    {
+        let storage_unit = ts::take_shared_by_id<StorageUnit>(&ts, storage_id);
+        let open_key = storage_unit.open_storage_key();
+        let inv = storage_unit.inventory(open_key);
+        assert!(!inv.contains_item(ITEM_TYPE_ID));
+        ts::return_shared(storage_unit);
+    };
+
+    // Verify pending count decremented
+    let (_likes, _completed, pending) = courier_service::get_player_metrics(&config, user_a());
+    assert!(pending == 0);
+
+    config::destroy_for_testing(config, admin_cap);
+    ts.end();
+}
+
+// ============================================================
 // === Tests: Race conditions ===
 // ============================================================
 

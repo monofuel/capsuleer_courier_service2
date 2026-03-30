@@ -169,6 +169,11 @@ proc connectedCallback(self: DeliveryList) =
     var _pkgId = `pkgId`;
     var _worldPkg = `worldPkg`;
     var _curSsu = curSsu;
+    var _refreshStats = `refreshStats`;
+    var _refreshDeliveryList = `refreshDeliveryList`;
+    var _refreshLeaderboard = `refreshLeaderboard`;
+    var _isDemo = `isDemo`;
+    var _isSuccess = `isSuccess`;
 
     // Wire up action buttons via event delegation.
     // Remove old handler to prevent duplicate firing on refresh.
@@ -203,7 +208,11 @@ proc connectedCallback(self: DeliveryList) =
 
       var tx;
       if (action === 'pickup') {
-        tx = `buildPickup`(_cfgId, _pkgId, deliverySsu, charId, deliveryId);
+        if (window._courierIsOwner) {
+          tx = `buildOwnerPickup`(_cfgId, _pkgId, deliverySsu, charId, deliveryId);
+        } else {
+          tx = `buildPickup`(_cfgId, _pkgId, deliverySsu, charId, deliveryId);
+        }
       } else if (btn.hasAttribute('data-owner')) {
         // SSU owner path — uses owner_fulfill_delivery (single moveCall, no PTB).
         tx = `buildOwnerFulfillDelivery`(_cfgId, _pkgId, deliverySsu, charId, deliveryId);
@@ -225,21 +234,17 @@ proc connectedCallback(self: DeliveryList) =
       }
 
       `signAndExecute`(tx).then(function(result) {
-        if (`isSuccess`(result)) {
-          btn.textContent = 'Done!';
-          btn.style.background = 'var(--success)';
+        if (_isSuccess(result)) {
           // Track demo state mutations.
-          if (`isDemo`) {
+          if (_isDemo) {
             if (!window._demoFulfilled) window._demoFulfilled = {};
             if (!window._demoPickedUp) window._demoPickedUp = {};
             if (action === 'pickup') window._demoPickedUp[deliveryId] = true;
             else window._demoFulfilled[deliveryId] = true;
           }
-          `refreshStats`();
-          setTimeout(function() {
-            `refreshDeliveryList`();
-            `refreshLeaderboard`();
-          }, 1000);
+          _refreshStats();
+          _refreshDeliveryList();
+          _refreshLeaderboard();
         } else {
           btn.textContent = 'Failed';
           btn.style.background = 'var(--error)';

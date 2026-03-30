@@ -429,6 +429,66 @@ public fun pickup(
     });
 }
 
+/// Owner pickup: same as pickup but deposits to the SSU's owner/ephemeral
+/// inventory via deposit_item instead of deposit_to_owned.
+/// This works around an EVE Frontier bug where deposit_to_owned creates an
+/// invisible per-Character inventory slot when the receiver is the SSU owner.
+public fun owner_pickup(
+    config: &mut ExtensionConfig,
+    storage_unit: &mut StorageUnit,
+    receiver_character: &Character,
+    delivery_id: u64,
+    ctx: &mut TxContext,
+) {
+    let key = DeliveryKey { id: delivery_id };
+    assert!(df::exists_(config.uid(), key), EDeliveryNotFound);
+
+    let delivery: &Delivery = df::borrow(config.uid(), key);
+    assert!(delivery.delivered, ENotDelivered);
+    assert!(delivery.receiver == ctx.sender(), ENotReceiver);
+    assert!(
+        object::id(storage_unit) == delivery.storage_unit_id,
+        EStorageUnitMismatch,
+    );
+
+    let type_id = delivery.type_id;
+    let quantity = delivery.quantity;
+
+    // Withdraw from open inventory (same as pickup)
+    let item = storage_unit.withdraw_from_open_inventory<CourierAuth>(
+        receiver_character,
+        config::courier_auth(),
+        type_id,
+        quantity,
+        ctx,
+    );
+
+    // Deposit to owner/ephemeral inventory (keyed by storage_unit.owner_cap_id)
+    // instead of deposit_to_owned (keyed by character.owner_cap_id)
+    storage_unit.deposit_item<CourierAuth>(
+        receiver_character,
+        item,
+        config::courier_auth(),
+        ctx,
+    );
+
+    // Decrement receiver's pending count
+    let receiver = delivery.receiver;
+    let metrics: &mut PlayerMetrics = df::borrow_mut(
+        config.uid_mut(),
+        PlayerMetricsKey { player: receiver },
+    );
+    metrics.pending_supply_count = metrics.pending_supply_count - 1;
+
+    // Remove delivery record
+    let _delivery: Delivery = df::remove(config.uid_mut(), key);
+
+    event::emit(DeliveryPickedUp {
+        delivery_id,
+        receiver,
+    });
+}
+
 /// Admin: configure millilikes reward for an item type.
 /// Access control: Move's type system enforces that only AdminCap holders can call this
 /// function — a transaction without a valid AdminCap reference cannot invoke set_likes.

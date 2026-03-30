@@ -45,6 +45,7 @@ proc connectedCallback(self: CourierQuote) =
     "Your delivery ETA is 'soon'. Space-soon. Don't ask.",
     "Interstellar shipping: where 'handle with care' is more of a suggestion.",
     "Do you know how hard it is to find parking at a Smart Storage Unit?",
+    "I'm delivering your package! ...with the guns I took off your wreck last Tuesday.",
   ];
 
   // Easter eggs — special quotes on specific conditions.
