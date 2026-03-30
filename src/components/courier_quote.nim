@@ -25,7 +25,7 @@ proc connectedCallback(self: CourierQuote) =
     "Another day, another delivery. Another day closer to retirement.",
     "They said 'last mile delivery' would be easy. They lied. It was 47 AU.",
     "My other ship is also full of your stuff.",
-    "Courier tip: if the cargo bay is glowing, drive faster.",
+    "Courier tip: if the cargo bay is glowing, warp faster.",
     "Trust the process. And by process, I mean the smart contract.",
     "Some call it logistics. I call it an adventure with a deadline.",
     "Package secured. Dignity... less so.",

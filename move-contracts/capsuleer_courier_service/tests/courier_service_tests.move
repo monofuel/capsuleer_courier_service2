@@ -209,6 +209,33 @@ fun mint_items(
     ts::return_shared(storage_unit);
 }
 
+/// Mint items into the SSU's ephemeral inventory (keyed by storage_unit.owner_cap_id).
+/// Uses OwnerCap<StorageUnit> instead of OwnerCap<Character>.
+fun mint_items_ephemeral(
+    ts: &mut ts::Scenario,
+    storage_id: ID,
+    character_id: ID,
+    user: address,
+    item_id: u64,
+    type_id: u64,
+    volume: u64,
+    quantity: u32,
+) {
+    ts::next_tx(ts, user);
+    let mut character = ts::take_shared_by_id<Character>(ts, character_id);
+    let (owner_cap, receipt) = character.borrow_owner_cap<StorageUnit>(
+        ts::most_recent_receiving_ticket<OwnerCap<StorageUnit>>(&character_id),
+        ts.ctx(),
+    );
+    let mut storage_unit = ts::take_shared_by_id<StorageUnit>(ts, storage_id);
+    storage_unit.game_item_to_chain_inventory_test<StorageUnit>(
+        &character, &owner_cap, item_id, type_id, volume, quantity, ts.ctx(),
+    );
+    character.return_owner_cap(owner_cap, receipt);
+    ts::return_shared(character);
+    ts::return_shared(storage_unit);
+}
+
 fun char_withdraw(
     ts: &mut ts::Scenario,
     storage_id: ID,
@@ -965,6 +992,111 @@ fun test_self_delivery_admin_cap() {
         courier_service::get_delivery(&config, delivery_id);
     assert!(sender == user_a());
     assert!(delivered);
+
+    config::destroy_for_testing(config, admin_cap);
+    ts.end();
+}
+
+// ============================================================
+// === Tests: Owner fulfill (ephemeral inventory) ===
+// ============================================================
+
+#[test]
+fun test_owner_fulfill_delivery() {
+    // SSU owner fulfills from ephemeral inventory (no pre-withdrawn Item needed).
+    let mut ts = ts::begin(admin());
+    setup_world(&mut ts);
+    let _receiver_id = create_character(&mut ts, user_a(), RECEIVER_CHAR_ID);
+    let courier_id = create_character(&mut ts, user_b(), COURIER_CHAR_ID);
+    // SSU owned by courier (user_b) so they have the ephemeral inventory
+    let (storage_id, nwn_id) = create_storage_unit(&mut ts, courier_id);
+    online_storage_unit(&mut ts, user_b(), courier_id, storage_id, nwn_id);
+
+    let (mut config, admin_cap) = config::create_for_testing(ts.ctx());
+    courier_service::set_likes(&mut config, &admin_cap, ITEM_TYPE_ID, 10000);
+
+    // Receiver creates delivery
+    ts.next_tx(user_a());
+    let delivery_id = courier_service::create_delivery_request(
+        &mut config, storage_id, ITEM_TYPE_ID, ITEM_QUANTITY, ts.ctx(),
+    );
+
+    // Mint items to SSU ephemeral inventory (not Character's owned inventory)
+    mint_items_ephemeral(&mut ts, storage_id, courier_id, user_b(),
+        ITEM_ITEM_ID, ITEM_TYPE_ID, ITEM_VOLUME, ITEM_QUANTITY);
+
+    // Courier fulfills using owner_fulfill_delivery
+    ts.next_tx(user_b());
+    {
+        let mut storage_unit = ts::take_shared_by_id<StorageUnit>(&ts, storage_id);
+        let character = ts::take_shared_by_id<Character>(&ts, courier_id);
+        courier_service::owner_fulfill_delivery(
+            &mut config, &mut storage_unit, &character, delivery_id, ts.ctx(),
+        );
+        ts::return_shared(storage_unit);
+        ts::return_shared(character);
+    };
+
+    // Verify delivery state
+    let (_ssu, _type_id, _qty, _receiver, sender, delivered) =
+        courier_service::get_delivery(&config, delivery_id);
+    assert!(sender == user_b());
+    assert!(delivered);
+
+    // Verify courier metrics: (10000 * 50) / 1000 = 500
+    let (likes, completed, _) = courier_service::get_player_metrics(&config, user_b());
+    assert!(likes == 500);
+    assert!(completed == 1);
+
+    config::destroy_for_testing(config, admin_cap);
+    ts.end();
+}
+
+#[test, expected_failure(abort_code = courier_service::EAlreadyDelivered)]
+fun test_owner_fulfill_delivery_already_delivered() {
+    // Cannot owner-fulfill the same delivery twice.
+    let mut ts = ts::begin(admin());
+    setup_world(&mut ts);
+    let _receiver_id = create_character(&mut ts, user_a(), RECEIVER_CHAR_ID);
+    let courier_id = create_character(&mut ts, user_b(), COURIER_CHAR_ID);
+    let (storage_id, nwn_id) = create_storage_unit(&mut ts, courier_id);
+    online_storage_unit(&mut ts, user_b(), courier_id, storage_id, nwn_id);
+
+    let (mut config, admin_cap) = config::create_for_testing(ts.ctx());
+    courier_service::set_likes(&mut config, &admin_cap, ITEM_TYPE_ID, 10000);
+
+    ts.next_tx(user_a());
+    let delivery_id = courier_service::create_delivery_request(
+        &mut config, storage_id, ITEM_TYPE_ID, ITEM_QUANTITY, ts.ctx(),
+    );
+
+    // Mint enough items for two deliveries
+    mint_items_ephemeral(&mut ts, storage_id, courier_id, user_b(),
+        ITEM_ITEM_ID, ITEM_TYPE_ID, ITEM_VOLUME, ITEM_QUANTITY * 2);
+
+    // First fulfill succeeds
+    ts.next_tx(user_b());
+    {
+        let mut storage_unit = ts::take_shared_by_id<StorageUnit>(&ts, storage_id);
+        let character = ts::take_shared_by_id<Character>(&ts, courier_id);
+        courier_service::owner_fulfill_delivery(
+            &mut config, &mut storage_unit, &character, delivery_id, ts.ctx(),
+        );
+        ts::return_shared(storage_unit);
+        ts::return_shared(character);
+    };
+
+    // Second fulfill should fail with EAlreadyDelivered
+    ts.next_tx(user_b());
+    {
+        let mut storage_unit = ts::take_shared_by_id<StorageUnit>(&ts, storage_id);
+        let character = ts::take_shared_by_id<Character>(&ts, courier_id);
+        courier_service::owner_fulfill_delivery(
+            &mut config, &mut storage_unit, &character, delivery_id, ts.ctx(),
+        );
+        ts::return_shared(storage_unit);
+        ts::return_shared(character);
+    };
 
     config::destroy_for_testing(config, admin_cap);
     ts.end();

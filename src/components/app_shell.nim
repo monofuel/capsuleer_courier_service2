@@ -4,7 +4,7 @@
 import
   std/dom,
   nimponents,
-  ../config,
+  ../[config, sui_client, courier_client],
   ./[wallet_connect, player_stats, create_delivery, admin_panel, delivery_list, leaderboard, courier_quote, debug_console]
 {.pop.}
 
@@ -58,21 +58,125 @@ proc render(self: AppShell) =
       "</div></main>"
     )
   elif isProduction:
-    self.innerHTML = cstring(
-      "<header>" &
-      "<h1>Capsuleer Courier Service</h1>" &
-      "<wallet-connect></wallet-connect>" &
-      "</header>" &
-      "<main>" &
-      "<courier-quote></courier-quote>" &
-      "<div class=\"panels\">" &
-      "<create-delivery></create-delivery>" &
-      "<delivery-list></delivery-list>" &
-      "<player-stats></player-stats>" &
-      "<courier-leaderboard></courier-leaderboard>" &
-      "<admin-panel></admin-panel>" &
-      "</div></main>"
-    )
+    # Check extension authorization state for onboarding gate.
+    var extAuthorized, extIsOwner, walletConnected: bool
+    {.emit: """
+    `extAuthorized` = !!window._courierExtensionAuthorized;
+    `extIsOwner` = !!window._courierIsOwner;
+    `walletConnected` = !!window._courierAddress;
+    """.}
+
+    if not walletConnected:
+      # State A: No wallet connected yet.
+      self.innerHTML = cstring(
+        "<header>" &
+        "<h1>Capsuleer Courier Service</h1>" &
+        "<wallet-connect></wallet-connect>" &
+        "</header>" &
+        "<main>" &
+        "<courier-quote></courier-quote>" &
+        "<div class=\"panels\">" &
+        "<div class=\"panel\" style=\"text-align:center;padding:3rem 2rem\">" &
+        "<h2 style=\"margin-bottom:1rem\">Welcome, Capsuleer</h2>" &
+        "<p style=\"color:var(--text-secondary)\">Connect your wallet to get started.</p>" &
+        "</div></div></main>"
+      )
+    elif not extAuthorized and extIsOwner:
+      # State B: Owner needs to authorize the extension.
+      self.innerHTML = cstring(
+        "<header>" &
+        "<h1>Capsuleer Courier Service</h1>" &
+        "<wallet-connect></wallet-connect>" &
+        "</header>" &
+        "<main>" &
+        "<courier-quote></courier-quote>" &
+        "<div class=\"panels\">" &
+        "<div class=\"panel\" style=\"text-align:center;padding:3rem 2rem\">" &
+        "<h2 style=\"margin-bottom:1rem\">Authorize the Courier Service</h2>" &
+        "<p style=\"color:var(--text-secondary);margin-bottom:0.5rem\">Your SSU needs the Courier Service extension authorized before it can accept delivery requests.</p>" &
+        "<p style=\"color:var(--text-muted);font-size:11px;margin-bottom:1.5rem\">This registers the courier contract on your Smart Storage Unit so it can manage item transfers.</p>" &
+        "<button class=\"btn\" id=\"gate-authorize\" style=\"font-size:1.1em;padding:0.75em 2em\">Authorize Extension</button>" &
+        "<div id=\"gate-status\" style=\"margin-top:1rem;color:var(--text-secondary)\"></div>" &
+        "</div></div></main>"
+      )
+      # Wire up authorize button.
+      {.emit: """
+      var gateBtn = `self`.querySelector('#gate-authorize');
+      if (gateBtn) {
+        gateBtn.addEventListener('click', function() {
+          var charId = window._courierCharId;
+          var capId = window._courierSsuOwnerCapId;
+          var capVer = window._courierSsuOwnerCapVersion;
+          var capDig = window._courierSsuOwnerCapDigest;
+          var statusDiv = `self`.querySelector('#gate-status');
+          if (!charId || !capId || !capVer || !capDig) {
+            if (statusDiv) statusDiv.textContent = 'Missing character or SSU info. Try refreshing.';
+            return;
+          }
+          gateBtn.disabled = true;
+          gateBtn.textContent = 'Authorizing...';
+          var tx = `buildAuthorizeExtension`(`packageId`, `worldPackageId`, `ssuId`, charId, capId, capVer, capDig);
+          `signAndExecute`(tx).then(function(result) {
+            if (`isSuccess`(result)) {
+              window._courierExtensionAuthorized = true;
+              gateBtn.textContent = 'Authorized!';
+              gateBtn.style.background = 'var(--success)';
+              if (statusDiv) statusDiv.textContent = 'Extension authorized. Loading courier service...';
+              setTimeout(function() {
+                if (`self`.connectedCallback) `self`.connectedCallback();
+              }, 1000);
+            } else {
+              gateBtn.textContent = 'Failed';
+              gateBtn.style.background = 'var(--error)';
+              if (statusDiv) statusDiv.textContent = 'Transaction failed. Check console for details.';
+              console.error('Authorize extension failed:', JSON.stringify(result, null, 2));
+              gateBtn.disabled = false;
+              setTimeout(function() { gateBtn.textContent = 'Authorize Extension'; gateBtn.style.background = ''; }, 3000);
+            }
+          }).catch(function(err) {
+            console.error('Authorize extension error:', err.message);
+            gateBtn.textContent = 'Error';
+            gateBtn.style.background = 'var(--error)';
+            if (statusDiv) statusDiv.textContent = err.message;
+            gateBtn.disabled = false;
+            setTimeout(function() { gateBtn.textContent = 'Authorize Extension'; gateBtn.style.background = ''; }, 3000);
+          });
+        });
+      }
+      """.}
+    elif not extAuthorized:
+      # State C: Not owner, extension not authorized.
+      self.innerHTML = cstring(
+        "<header>" &
+        "<h1>Capsuleer Courier Service</h1>" &
+        "<wallet-connect></wallet-connect>" &
+        "</header>" &
+        "<main>" &
+        "<courier-quote></courier-quote>" &
+        "<div class=\"panels\">" &
+        "<div class=\"panel\" style=\"text-align:center;padding:3rem 2rem\">" &
+        "<h2 style=\"margin-bottom:1rem\">Courier Service Not Enabled</h2>" &
+        "<p style=\"color:var(--text-secondary)\">This SSU hasn't enabled the Courier Service yet.</p>" &
+        "<p style=\"color:var(--text-muted);font-size:11px;margin-top:0.5rem\">The SSU owner needs to authorize the courier extension first.</p>" &
+        "</div></div></main>"
+      )
+    else:
+      # State D: Authorized — normal UI.
+      self.innerHTML = cstring(
+        "<header>" &
+        "<h1>Capsuleer Courier Service</h1>" &
+        "<wallet-connect></wallet-connect>" &
+        "</header>" &
+        "<main>" &
+        "<courier-quote></courier-quote>" &
+        "<div class=\"panels\">" &
+        "<create-delivery></create-delivery>" &
+        "<delivery-list></delivery-list>" &
+        "<player-stats></player-stats>" &
+        "<courier-leaderboard></courier-leaderboard>" &
+        "<admin-panel></admin-panel>" &
+        "</div></main>"
+      )
   # Debug console is fixed-position, append once to body (not inside app shell).
   {.emit: """
   if (!document.querySelector('debug-console')) {

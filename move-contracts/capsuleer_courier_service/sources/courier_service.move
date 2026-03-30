@@ -296,6 +296,79 @@ public fun admin_fulfill_delivery(
     });
 }
 
+/// Owner fulfill: withdraws directly from the SSU's ephemeral inventory
+/// using extension auth, then deposits to open inventory.
+/// No pre-withdrawn Item needed — the contract handles withdrawal internally.
+/// Works for any SSU owner who has items in the ephemeral inventory.
+/// Self-delivery is blocked unless the courier is the hardcoded admin address.
+public fun owner_fulfill_delivery(
+    config: &mut ExtensionConfig,
+    storage_unit: &mut StorageUnit,
+    character: &Character,
+    delivery_id: u64,
+    ctx: &mut TxContext,
+) {
+    let key = DeliveryKey { id: delivery_id };
+    assert!(df::exists_(config.uid(), key), EDeliveryNotFound);
+
+    // Read delivery info and validate via immutable borrow
+    let courier = ctx.sender();
+    let type_id;
+    let quantity;
+    {
+        let delivery: &Delivery = df::borrow(config.uid(), key);
+        assert!(!delivery.delivered, EAlreadyDelivered);
+        assert!(courier != delivery.receiver || courier == ADMIN_ADDRESS, ESelfDelivery);
+        assert!(
+            object::id(storage_unit) == delivery.storage_unit_id,
+            EStorageUnitMismatch,
+        );
+        type_id = delivery.type_id;
+        quantity = delivery.quantity;
+    };
+
+    // Withdraw from SSU's ephemeral inventory (keyed by storage_unit.owner_cap_id)
+    let item = storage_unit.withdraw_item<CourierAuth>(
+        character,
+        config::courier_auth(),
+        type_id,
+        quantity,
+        ctx,
+    );
+
+    // Deposit to open inventory (extension-controlled escrow)
+    storage_unit.deposit_to_open_inventory<CourierAuth>(
+        character,
+        item,
+        config::courier_auth(),
+        ctx,
+    );
+
+    // Mark as delivered
+    let delivery: &mut Delivery = df::borrow_mut(config.uid_mut(), key);
+    delivery.delivered = true;
+    delivery.sender = courier;
+
+    // Calculate and award likes
+    let item_likes: &ItemLikes = df::borrow(config.uid(), ItemLikesKey { type_id });
+    let likes_earned = (item_likes.millilikes * (quantity as u64)) / LIKES_PRECISION;
+
+    // Update courier metrics
+    ensure_player_metrics(config, courier);
+    let metrics: &mut PlayerMetrics = df::borrow_mut(
+        config.uid_mut(),
+        PlayerMetricsKey { player: courier },
+    );
+    metrics.likes = metrics.likes + likes_earned;
+    metrics.deliveries_completed = metrics.deliveries_completed + 1;
+
+    event::emit(DeliveryFulfilled {
+        delivery_id,
+        courier,
+        likes_earned,
+    });
+}
+
 /// Pickup a delivered item. Only the original receiver can call this.
 /// Withdraws the item from the SSU's open inventory and deposits it into
 /// the receiver's owned inventory on the same SSU.

@@ -31,17 +31,17 @@ proc connectedCallback(self: DeliveryList) =
     let deliveries = await queryDeliveries(rpcUrl, pkgId)
 
     # Resolve character names for all addresses in deliveries.
-    var addrs: seq[cstring]
-    {.emit: """
-    `addrs` = [];
-    var _dd = `deliveries`;
-    for (var i = 0; i < _dd.length; i++) {
-      var d = _dd[i].Field1 || _dd[i];
-      if (d.receiver) `addrs`.push(d.receiver);
-      if (d.courier) `addrs`.push(d.courier);
-    }
-    """.}
-    await resolveCharacterNames(rpcUrl, worldPkg, addrs)
+    if rpcUrl != nil and worldPkg != nil:
+      {.emit: """
+      var _nameAddrs = [];
+      var _dd = `deliveries`;
+      for (var i = 0; i < _dd.length; i++) {
+        var d = _dd[i].Field1 || _dd[i];
+        if (d.receiver) _nameAddrs.push(d.receiver);
+        if (d.courier) _nameAddrs.push(d.courier);
+      }
+      await `resolveCharacterNames`(`rpcUrl`, `worldPkg`, _nameAddrs);
+      """.}
 
     {.emit: """
     var _dlData = `deliveries`;
@@ -88,10 +88,6 @@ proc connectedCallback(self: DeliveryList) =
 
     var html = '';
 
-    // --- Current SSU info ---
-    var ssuDisplay = curSsu ? _dlAddr(curSsu) : 'No SSU selected';
-    html += '<div class="panel"><p style="font-size:11px;color:var(--text-muted)">Current SSU: <span style="color:var(--text-primary)">' + ssuDisplay + '</span></p></div>';
-
     // --- Section 1: Ready for Pickup ---
     html += '<div class="panel"><div class="panel-header"><h3>Ready for Pickup</h3>' +
       '<button class="btn btn-sm" id="refresh-deliveries">Refresh</button></div>';
@@ -108,7 +104,7 @@ proc connectedCallback(self: DeliveryList) =
           '<td>' + _dlTypeName(d.typeId) + '</td>' +
           '<td>' + d.quantity + '</td>' +
           '<td>' + _dlAddr(d.courier) + '</td>' +
-          '<td><button class="btn btn-sm btn-pickup" data-action="pickup" data-id="' + d.deliveryId + '">Pick up</button></td></tr>';
+          '<td><button class="btn btn-sm btn-pickup" data-action="pickup" data-id="' + d.deliveryId + '" data-ssu="' + d.storageUnitId + '" data-type="' + d.typeId + '" data-qty="' + d.quantity + '">Pick up</button></td></tr>';
       }
       html += '</tbody></table>';
     }
@@ -145,13 +141,14 @@ proc connectedCallback(self: DeliveryList) =
       for (var i = 0; i < available.length; i++) {
         var d = available[i];
         var isSelfDeliver = isAdmin && (d.receiver === connAddr);
-        var btnLabel = isSelfDeliver ? 'Deliver <span class="admin-label">(admin)</span>' : 'Deliver';
+        var btnLabel = isSelfDeliver ? 'Deliver <span class="admin-label">(owner)</span>' : 'Deliver';
+        var ownerAttr = isSelfDeliver ? ' data-owner="true"' : '';
         html += '<tr' + _ssuClass(d.storageUnitId) + '><td>' + d.deliveryId + '</td>' +
           '<td>' + _dlAddr(d.storageUnitId) + '</td>' +
           '<td>' + _dlTypeName(d.typeId) + '</td>' +
           '<td>' + d.quantity + '</td>' +
           '<td>' + _dlAddr(d.receiver) + '</td>' +
-          '<td><button class="btn btn-sm" data-action="deliver" data-id="' + d.deliveryId + '">' + btnLabel + '</button></td></tr>';
+          '<td><button class="btn btn-sm"' + ownerAttr + ' data-action="deliver" data-id="' + d.deliveryId + '" data-ssu="' + d.storageUnitId + '" data-type="' + d.typeId + '" data-qty="' + d.quantity + '">' + btnLabel + '</button></td></tr>';
       }
       html += '</tbody></table>';
     }
@@ -167,20 +164,64 @@ proc connectedCallback(self: DeliveryList) =
       });
     }
 
+    // Capture Nim closure vars for use inside event listener (where `this` changes).
+    var _cfgId = `cfgId`;
+    var _pkgId = `pkgId`;
+    var _worldPkg = `worldPkg`;
+    var _curSsu = curSsu;
+
     // Wire up action buttons via event delegation.
-    window._dlEl.addEventListener('click', function(ev) {
+    // Remove old handler to prevent duplicate firing on refresh.
+    if (window._dlEl._clickHandler) {
+      window._dlEl.removeEventListener('click', window._dlEl._clickHandler);
+    }
+    window._dlEl._clickHandler = function(ev) {
       var btn = ev.target.closest('[data-action]');
       if (!btn) return;
       var action = btn.getAttribute('data-action');
       var deliveryId = btn.getAttribute('data-id');
+      var deliverySsu = btn.getAttribute('data-ssu') || _curSsu;
+      var deliveryType = btn.getAttribute('data-type');
+      var deliveryQty = parseInt(btn.getAttribute('data-qty')) || 1;
       btn.disabled = true;
       btn.textContent = 'Submitting...';
 
+      var charId = window._courierCharId;
+      if (!charId) {
+        console.error('No character ID found — connect wallet first');
+        btn.textContent = 'No Character';
+        btn.style.background = 'var(--error)';
+        btn.disabled = false;
+        setTimeout(function() {
+          btn.textContent = action === 'pickup' ? 'Pick up' : 'Deliver';
+          btn.style.background = '';
+        }, 3000);
+        return;
+      }
+
+      console.log('[action]', action, 'id:', deliveryId, 'ssu:', deliverySsu, 'type:', deliveryType, 'qty:', deliveryQty, 'char:', charId);
+
       var tx;
       if (action === 'pickup') {
-        tx = `buildPickup`(`cfgId`, `pkgId`, deliveryId);
+        tx = `buildPickup`(_cfgId, _pkgId, deliverySsu, charId, deliveryId);
+      } else if (btn.hasAttribute('data-owner')) {
+        // SSU owner path — uses owner_fulfill_delivery (single moveCall, no PTB).
+        tx = `buildOwnerFulfillDelivery`(_cfgId, _pkgId, deliverySsu, charId, deliveryId);
       } else {
-        tx = `buildFulfillDelivery`(`cfgId`, `pkgId`, deliveryId);
+        var ownerCapId = window._courierOwnerCapId;
+        var ownerCapVer = window._courierOwnerCapVersion;
+        var ownerCapDig = window._courierOwnerCapDigest;
+        if (!ownerCapId || !ownerCapVer || !ownerCapDig) {
+          console.error('No OwnerCap info — cannot withdraw items');
+          btn.textContent = 'No OwnerCap';
+          btn.style.background = 'var(--error)';
+          btn.disabled = false;
+          setTimeout(function() { btn.textContent = 'Deliver'; btn.style.background = ''; }, 3000);
+          return;
+        }
+        tx = `buildFulfillDelivery`(_cfgId, _pkgId, _worldPkg, deliverySsu,
+          charId, ownerCapId, ownerCapVer, ownerCapDig,
+          deliveryId, deliveryType, deliveryQty);
       }
 
       `signAndExecute`(tx).then(function(result) {
@@ -202,9 +243,14 @@ proc connectedCallback(self: DeliveryList) =
         } else {
           btn.textContent = 'Failed';
           btn.style.background = 'var(--error)';
+          console.error('Transaction failed — full result:', JSON.stringify(result, null, 2));
+          if (result && result.effects) console.error('Transaction effects:', JSON.stringify(result.effects, null, 2));
         }
       }).catch(function(err) {
         console.error('Action error:', err);
+        console.error('Action error message:', err.message);
+        console.error('Action error JSON:', JSON.stringify(err, null, 2));
+        if (err.cause) console.error('Action error cause:', err.cause);
         btn.textContent = 'Error';
         btn.style.background = 'var(--error)';
         btn.disabled = false;
@@ -213,7 +259,8 @@ proc connectedCallback(self: DeliveryList) =
           btn.style.background = '';
         }, 3000);
       });
-    });
+    };
+    window._dlEl.addEventListener('click', window._dlEl._clickHandler);
     """.}
 
   runWithErrorHandler(load(), self)

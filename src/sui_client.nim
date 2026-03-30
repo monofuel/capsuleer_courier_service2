@@ -131,6 +131,60 @@ proc moveCall*(tx: Transaction, target: cstring, arguments: openArray[Transactio
   `tx`.moveCall({ target: `target`, arguments: argsArray });
   """.}
 
+proc moveCallWithReturn*(tx: Transaction, target: cstring, arguments: openArray[TransactionArgument]): TransactionArgument =
+  ## Call a Move function and return its TransactionResult for PTB chaining.
+  var res: TransactionArgument
+  {.emit: """
+  const argsArray = [];
+  for (let i = 0; i < `arguments`.length; i++) {
+    argsArray.push(`arguments`[i]);
+  }
+  `res` = `tx`.moveCall({ target: `target`, arguments: argsArray });
+  """.}
+  result = res
+
+proc moveCallTyped*(tx: Transaction, target: cstring,
+    typeArguments: openArray[cstring],
+    arguments: openArray[TransactionArgument]): TransactionArgument =
+  ## Call a generic Move function with type arguments, returning result for PTB chaining.
+  ## Note: typeArguments are cstring but Nim may pass them as Nim strings internally,
+  ## so we convert via toJSStr to get proper JS strings for the SDK.
+  var res: TransactionArgument
+  {.emit: """
+  const argsArray = [];
+  for (let i = 0; i < `arguments`.length; i++) {
+    argsArray.push(`arguments`[i]);
+  }
+  const typeArgsArray = [];
+  for (let i = 0; i < `typeArguments`.length; i++) {
+    var t = `typeArguments`[i];
+    typeArgsArray.push(typeof t === 'string' ? t : toJSStr(t));
+  }
+  var tgt = `target`;
+  if (typeof tgt !== 'string') tgt = toJSStr(tgt);
+  `res` = `tx`.moveCall({ target: tgt, typeArguments: typeArgsArray, arguments: argsArray });
+  """.}
+  result = res
+
+proc txReceivingRef*(tx: Transaction, objectId: cstring, version: cstring, digest: cstring): TransactionArgument =
+  ## Create a receiving reference for the Sui "Receiving" pattern.
+  ## Requires version and digest from the object's on-chain state.
+  var res: TransactionArgument
+  {.emit: """
+  `res` = `tx`.object(window.SuiSDK.Inputs.ReceivingRef({
+    objectId: `objectId`,
+    version: `version`,
+    digest: `digest`,
+  }));
+  """.}
+  result = res
+
+proc txIndex*(txResult: TransactionArgument, index: int): TransactionArgument =
+  ## Access a specific return value from a multi-return moveCall (tuple destructuring).
+  var res: TransactionArgument
+  {.emit: "`res` = `txResult`[`index`];".}
+  result = res
+
 # --- Result helpers ---
 
 proc digest*(txResult: TransactionResult): cstring {.importjs: "#.digest".}

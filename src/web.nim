@@ -24,10 +24,19 @@ proc main() {.async.} =
       if savedName.len > 0:
         setAddressName(connectedAddress, savedName)
 
-    for selector in ["player-stats", "create-delivery", "courier-actions", "admin-panel", "delivery-list", "courier-leaderboard"]:
-      let el = document.querySelector(cstring(selector))
-      if not el.isNil:
-        {.emit: "if (`el`.connectedCallback) `el`.connectedCallback();".}
+    proc afterConnect() {.async.} =
+      # Fetch character info first (sets window._courierCharId, needed for owner detection).
+      if rpcUrl != nil and worldPackageId != nil and connectedAddress != nil:
+        await fetchCharacterInfo(rpcUrl, worldPackageId, connectedAddress)
+      # Then fetch SSU info (checks extension auth + owner using charId).
+      if rpcUrl != nil and ssuId != nil:
+        await fetchSsuOwnerCapId(rpcUrl, ssuId)
+      # Re-render app shell (gate check happens there), which re-creates child components.
+      let appEl = document.querySelector("courier-app")
+      if not appEl.isNil:
+        {.emit: "if (`appEl`.connectedCallback) `appEl`.connectedCallback();".}
+
+    {.emit: "`afterConnect`().catch(function(e) { console.error('[init] Post-connect error:', e); });".}
 
 
 {.emit: """

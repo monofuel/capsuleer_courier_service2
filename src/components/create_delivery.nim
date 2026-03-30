@@ -136,7 +136,7 @@ proc render(self: CreateDelivery) =
 
   let ssuFieldHtml: cstring =
     if hasSsu:
-      ""
+      cstring("")
     else:
       cstring(
         "<div class=\"form-group\"><label>Storage Unit ID</label>" &

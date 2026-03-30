@@ -20,7 +20,7 @@ mkdir -p "$DEPLOY_DIR"
 
 echo "[deploy] Publishing courier service to $ENV_NAME..."
 cd "$COURIER_DIR"
-sui client publish -e testnet --json 2>/dev/null > "$DEPLOY_DIR/courier_package.json"
+sui client publish -e "testnet_$ENV_NAME" --json 2>/dev/null > "$DEPLOY_DIR/courier_package.json"
 
 BUILDER_PACKAGE_ID=$(jq -r '.objectChanges[] | select(.type == "published") | .packageId' "$DEPLOY_DIR/courier_package.json")
 EXTENSION_CONFIG_ID=$(jq -r '.objectChanges[] | select(.objectType? // "" | endswith("::config::ExtensionConfig")) | .objectId' "$DEPLOY_DIR/courier_package.json")
