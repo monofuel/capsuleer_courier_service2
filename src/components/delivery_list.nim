@@ -11,6 +11,15 @@ import
 
 type DeliveryList* = ref object of WebComponent
 
+proc refreshDeliveryList*() =
+  ## Re-render all delivery-list elements.
+  let elements = document.querySelectorAll("delivery-list")
+  {.emit: """
+  for (var i = 0; i < `elements`.length; i++) {
+    if (`elements`[i].connectedCallback) `elements`[i].connectedCallback();
+  }
+  """.}
+
 proc connectedCallback(self: DeliveryList) =
   ## Called when element is added to DOM. Loads deliveries from chain events.
   if packageId == nil:
@@ -242,9 +251,22 @@ proc connectedCallback(self: DeliveryList) =
             if (action === 'pickup') window._demoPickedUp[deliveryId] = true;
             else window._demoFulfilled[deliveryId] = true;
           }
-          _refreshStats();
-          _refreshDeliveryList();
-          _refreshLeaderboard();
+          // Remember current delivery count, then poll until it changes.
+          var _prevCount = window._dlEl.querySelectorAll('[data-action]').length;
+          var _pollAttempts = 0;
+          function _pollRefresh() {
+            _pollAttempts++;
+            _refreshStats();
+            _refreshDeliveryList();
+            _refreshLeaderboard();
+            if (_pollAttempts < 3) {
+              setTimeout(function() {
+                var newCount = window._dlEl.querySelectorAll('[data-action]').length;
+                if (newCount === _prevCount) _pollRefresh();
+              }, 3000);
+            }
+          }
+          _pollRefresh();
         } else {
           btn.textContent = 'Failed';
           btn.style.background = 'var(--error)';
@@ -271,12 +293,3 @@ proc connectedCallback(self: DeliveryList) =
   runWithErrorHandler(load(), self)
 
 setupNimponent[DeliveryList]("delivery-list", nil, connectedCallback)
-
-proc refreshDeliveryList*() =
-  ## Re-render all delivery-list elements.
-  let elements = document.querySelectorAll("delivery-list")
-  {.emit: """
-  for (var i = 0; i < `elements`.length; i++) {
-    if (`elements`[i].connectedCallback) `elements`[i].connectedCallback();
-  }
-  """.}

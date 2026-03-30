@@ -30,6 +30,32 @@ Subsequent deploys (updates existing site):
 site-builder deploy --epochs <N> ./web
 ```
 
+## Site URL (Base36)
+
+After deploying, `site-builder` outputs a Sui object ID for your site. The public URL is the base36 encoding of that object ID:
+
+```
+https://<base36-id>.walrus.site
+```
+
+This is automatic — the deploy command prints both the object ID and the browsable URL. You can also convert manually:
+
+```bash
+site-builder convert <object-id>
+```
+
+Testnet epochs last 2 days each, max 183 epochs. Each deploy gets a new hash. You can extend storage on a previous version without redeploying.
+
+## SuiNS Custom Name (Future)
+
+Instead of a base36 hash URL, you can use a SuiNS name for a human-readable URL like `capsuleer-courier.walrus.site`.
+
+1. Purchase a SuiNS name at https://testnet.suins.io
+2. In the SuiNS dashboard, use "Link To Walrus Site" and point it to your site's object ID
+3. Your site is now accessible at `https://<your-name>.walrus.site`
+
+Custom domains (bring your own domain) require self-hosting a Walrus portal server with a reverse proxy — not worth it for testnet/hackathon use.
+
 ## Useful Commands
 
 | Command | Description |

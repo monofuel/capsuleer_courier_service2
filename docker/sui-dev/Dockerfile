@@ -27,6 +27,13 @@ RUN curl -sSfL https://raw.githubusercontent.com/MystenLabs/suiup/main/install.s
     && echo y | suiup install sui \
     && sui --version
 
+# Walrus CLI + site-builder for decentralized frontend hosting
+RUN curl -sSfL https://storage.googleapis.com/mysten-walrus-binaries/walrus-testnet-latest-ubuntu-x86_64 -o /usr/local/bin/walrus \
+    && chmod +x /usr/local/bin/walrus \
+    && curl -sSfL https://storage.googleapis.com/mysten-walrus-binaries/site-builder-testnet-latest-ubuntu-x86_64 -o /usr/local/bin/site-builder \
+    && chmod +x /usr/local/bin/site-builder \
+    && walrus --version && site-builder --version
+
 WORKDIR /workspace
 ENV SUI_CONFIG_DIR=/root/.sui
 

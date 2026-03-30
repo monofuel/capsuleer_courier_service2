@@ -1,4 +1,4 @@
-.PHONY: test integration-test e2e-test build docker-build docker-build-push serve move-build move-test deploy-local deploy-stillness deploy-utopia wallet-setup dev npm-install integration-build frontend-bundle frontend-build frontend-dev
+.PHONY: test integration-test e2e-test build docker-build docker-build-push serve move-build move-test deploy-local deploy-stillness deploy-utopia deploy-walrus deploy-pages wallet-setup dev npm-install integration-build frontend-bundle frontend-build frontend-dev
 
 DOCKER_IMAGE ?= gitea.solution-nine.monofuel.dev/monolab/capsuleer_courier_service2:latest
 DOCKER_PLATFORM ?= linux/amd64
@@ -93,6 +93,20 @@ deploy-stillness: wallet-setup
 
 deploy-utopia: wallet-setup
 	docker compose run --rm --entrypoint bash sui-dev -c "bash /opt/sui-dev/scripts/deploy-testnet.sh utopia"
+
+deploy-walrus: wallet-setup frontend-build
+	docker compose run --rm --entrypoint bash sui-dev -c "bash /opt/sui-dev/scripts/deploy-walrus.sh"
+
+deploy-pages: frontend-build
+	@echo "Deploying to GitHub Pages..."
+	cd web && \
+	rm -f ws-resources.json && \
+	git init -b gh-pages && \
+	git add -A && \
+	git commit -m "Deploy to GitHub Pages" && \
+	git push -f git@github.com:monofuel/capsuleer_courier_service2.git gh-pages && \
+	rm -rf .git
+	@echo "Deployed! Visit https://monofuel.github.io/capsuleer_courier_service2/"
 
 docker-build:
 	docker buildx build \
