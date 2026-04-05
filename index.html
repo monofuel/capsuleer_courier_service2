@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Capsuleer Courier Service</title>
+  <link rel="stylesheet" href="https://artifacts.evefrontier.com/fonts/fonts.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <script>
+  // Buffer early console messages before debug console is ready.
+  (function() {
+    window._dcBuffer = [];
+    var orig = {log: console.log, warn: console.warn, error: console.error, info: console.info};
+    ['log','warn','error','info'].forEach(function(level) {
+      console[level] = function() {
+        orig[level].apply(console, arguments);
+        window._dcBuffer.push({level: level, args: Array.prototype.slice.call(arguments), ts: new Date()});
+      };
+    });
+    window._dcOrigConsole = orig;
+  })();
+  </script>
+  <courier-app></courier-app>
+  <script src="sui-bundle.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
